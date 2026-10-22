@@ -11,6 +11,7 @@ mod card;
 mod checkbox;
 mod color_picker;
 mod content_dialog;
+mod data_table;
 mod date_picker;
 mod divider;
 mod dynamic_overflow;
@@ -48,6 +49,10 @@ pub use card::Card;
 pub use checkbox::Checkbox;
 pub use color_picker::{ColorPicker, ColorSpectrumShape};
 pub use content_dialog::{ContentDialog, DialogResult};
+pub use data_table::{
+    Column, ColumnFilter, DataTable, DataTableLabels, DataTableResponse, DataTableSelectionMode,
+    DataTableState, SortDirection,
+};
 pub use date_picker::DatePicker;
 pub use divider::Divider;
 pub use dynamic_overflow::{DynamicOverflow, DynamicOverflowResponse};

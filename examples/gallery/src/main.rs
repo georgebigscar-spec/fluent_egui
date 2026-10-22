@@ -7,14 +7,15 @@ use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
     AccentColor, Acrylic, AutoSuggestBox, BreadcrumbBar, Brightness, Button, CalendarDatePicker,
-    CalendarView, Card, Checkbox, ColorPicker, ColorSpectrumShape, ComboBox, CommandBar,
-    ContentDialog, DatePicker, DateRange, DialogResult, Divider, DropDownButton, DynamicOverflow,
-    Expander, FluentTheme, FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel,
-    ListTile, ListTileSelectionMode, Localizations, MenuBar, MenuItem, Mica, NavigationView,
-    NumberBox, PageTransition, PageTransitionKind, PaneDisplayMode, PaneItem, PasswordBox,
-    ProgressBar, ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton, Tab, TabView,
-    TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem, TreeViewSelectionMode,
-    colors, combo_value, context_menu, fonts, l10n, menu_separator, radio_value, sub_menu,
+    CalendarView, Card, Checkbox, ColorPicker, ColorSpectrumShape, Column, ComboBox, CommandBar,
+    ContentDialog, DataTable, DatePicker, DateRange, DialogResult, Divider, DropDownButton,
+    DynamicOverflow, Expander, FluentTheme, FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar,
+    InfoLabel, ListTile, ListTileSelectionMode, Localizations, MenuBar, MenuItem, Mica,
+    NavigationView, NumberBox, PageTransition, PageTransitionKind, PaneDisplayMode, PaneItem,
+    PasswordBox, ProgressBar, ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton,
+    Tab, TabView, TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem,
+    TreeViewSelectionMode, colors, combo_value, context_menu, fonts, l10n, menu_separator,
+    radio_value, sub_menu,
 };
 
 fn main() -> eframe::Result {
@@ -41,6 +42,7 @@ enum Page {
     Flyouts,
     Navigation,
     Pickers,
+    DataTable,
     Progress,
     Status,
     Colors,
@@ -61,7 +63,7 @@ enum Entry {
 }
 
 impl Page {
-    const PANE: [Entry; 15] = [
+    const PANE: [Entry; 17] = [
         Entry::Header("Controls"),
         Entry::Page(Page::Buttons, "🔘", "Buttons"),
         Entry::Page(Page::Inputs, "☑", "Inputs"),
@@ -72,6 +74,8 @@ impl Page {
         Entry::Page(Page::Flyouts, "💬", "Flyouts & menus"),
         Entry::Page(Page::Navigation, "🗺", "Navigation"),
         Entry::Page(Page::Pickers, "📅", "Pickers"),
+        Entry::Header("Data"),
+        Entry::Page(Page::DataTable, "▦", "Data table"),
         Entry::Header("Status"),
         Entry::Page(Page::Progress, "⏳", "Progress"),
         Entry::Page(Page::Status, "🔔", "InfoBadge & InfoLabel"),
@@ -183,6 +187,12 @@ struct Demo {
     query: String,
     list_selected: usize,
     list_checked: [bool; 3],
+    tasks: Vec<Task>,
+    next_task: u32,
+    table_reorder: bool,
+    table_striped: bool,
+    table_paged: bool,
+    table_log: String,
 }
 
 impl Default for Demo {
@@ -230,6 +240,12 @@ impl Default for Demo {
             query: String::new(),
             list_selected: 0,
             list_checked: [true, false, false],
+            tasks: sample_tasks(),
+            next_task: 1121,
+            table_reorder: true,
+            table_striped: false,
+            table_paged: true,
+            table_log: "nothing yet".to_owned(),
         }
     }
 }
@@ -336,6 +352,7 @@ impl eframe::App for Gallery {
                                 Page::Flyouts => flyouts_page(ui, &theme, &mut self.demo),
                                 Page::Navigation => navigation_page(ui, &theme, &mut self.demo),
                                 Page::Pickers => pickers_page(ui, &theme, &mut self.demo),
+                                Page::DataTable => data_table_page(ui, &theme, &mut self.demo),
                                 Page::Progress => progress_page(ui, &theme, &mut self.demo),
                                 Page::Status => status_page(ui, &theme, &mut self.demo),
                                 Page::Colors => colors_page(ui, &theme),
@@ -357,6 +374,276 @@ impl eframe::App for Gallery {
             });
         self.page = page;
     }
+}
+
+/// A row of the data table demo.
+#[derive(Clone)]
+struct Task {
+    id: u32,
+    title: String,
+    kind: &'static str,
+    status: &'static str,
+    priority: &'static str,
+    assignee: &'static str,
+    estimate: f32,
+}
+
+const STATUSES: [&str; 5] = ["Backlog", "Todo", "In progress", "Done", "Canceled"];
+const PRIORITIES: [&str; 3] = ["Low", "Medium", "High"];
+
+/// 120 made-up tasks, the same on every run.
+fn sample_tasks() -> Vec<Task> {
+    const VERBS: [&str; 8] = [
+        "Fix", "Refactor", "Document", "Port", "Test", "Profile", "Review", "Polish",
+    ];
+    const THINGS: [&str; 10] = [
+        "the date picker",
+        "focus borders",
+        "NavigationView transitions",
+        "the color spectrum",
+        "acrylic blur",
+        "menu keyboard navigation",
+        "the theme resources",
+        "localized strings",
+        "TabView drag and drop",
+        "high contrast colors",
+    ];
+    const KINDS: [&str; 3] = ["Bug", "Feature", "Docs"];
+    const PEOPLE: [&str; 6] = [
+        "ada@example.com",
+        "linus@example.com",
+        "grace@example.com",
+        "alan@example.com",
+        "barbara@example.com",
+        "ken@example.com",
+    ];
+    let mut seed = 0x2545_f491_u32;
+    let mut next = |n: usize| {
+        seed ^= seed << 13;
+        seed ^= seed >> 17;
+        seed ^= seed << 5;
+        seed as usize % n
+    };
+    (0..120)
+        .map(|i| Task {
+            id: 1001 + i,
+            title: format!(
+                "{} {}",
+                VERBS[next(VERBS.len())],
+                THINGS[next(THINGS.len())]
+            ),
+            kind: KINDS[next(KINDS.len())],
+            status: STATUSES[next(STATUSES.len())],
+            priority: PRIORITIES[next(PRIORITIES.len())],
+            assignee: PEOPLE[next(PEOPLE.len())],
+            estimate: (next(32) + 1) as f32 / 2.0,
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+enum TaskAction {
+    Edit,
+    Duplicate,
+    CopyId,
+    SetStatus(&'static str),
+    Delete,
+}
+
+fn data_table_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    ui.label(
+        "Sorting (Shift+click a header to sort by several columns), search, text and faceted \
+         filters, pagination, row selection, row actions, column visibility, resizing (drag a \
+         header edge, double-click to reset) and drag and drop for rows and columns.",
+    );
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 24.0;
+        ui.add(ToggleSwitch::new(&mut demo.table_reorder, "Reorder rows"));
+        ui.add(ToggleSwitch::new(&mut demo.table_paged, "Pagination"));
+        ui.add(ToggleSwitch::new(&mut demo.table_striped, "Striped"));
+    });
+    section(ui, theme, "DataTable");
+
+    let r = &theme.resources;
+    let status_color = |status: &str| match status {
+        "Done" => r.system_fill_color_success,
+        "In progress" => theme.accent_color.default_brush_for(theme.brightness),
+        "Canceled" => r.system_fill_color_critical,
+        "Todo" => r.system_fill_color_caution,
+        _ => r.system_fill_color_neutral,
+    };
+    let secondary = r.text_fill_color_secondary;
+    let rank = |list: &[&str], value: &str| list.iter().position(|v| *v == value);
+    let response = DataTable::new("tasks")
+        .row_key(|t: &Task| t.id)
+        .reorderable_rows(demo.table_reorder)
+        .pagination(demo.table_paged)
+        .striped(demo.table_striped)
+        .column(
+            Column::new("id", "Task", |t: &Task| format!("TASK-{}", t.id))
+                .width(110.0)
+                .sort_key(|t: &Task| t.id),
+        )
+        .column(
+            Column::new("title", "Title", |t: &Task| t.title.clone())
+                .width(340.0)
+                .min_width(120.0)
+                .text_filter()
+                .cell(|ui, t: &Task| {
+                    // An outlined chip with the task type.
+                    let galley = ui.painter().layout_no_wrap(
+                        t.kind.to_owned(),
+                        theme.typography.caption.font_id(),
+                        secondary,
+                    );
+                    let (chip, _) = ui.allocate_exact_size(
+                        galley.size() + egui::vec2(12.0, 4.0),
+                        egui::Sense::hover(),
+                    );
+                    ui.painter().rect_stroke(
+                        chip,
+                        4.0,
+                        egui::Stroke::new(1.0, r.control_strong_stroke_color_default),
+                        egui::StrokeKind::Inside,
+                    );
+                    ui.painter()
+                        .galley(chip.min + egui::vec2(6.0, 2.0), galley, secondary);
+                    ui.label(&t.title);
+                }),
+        )
+        .column(
+            Column::new("kind", "Type", |t: &Task| t.kind.to_owned())
+                .width(100.0)
+                .faceted(),
+        )
+        .column(
+            Column::new("status", "Status", |t: &Task| t.status.to_owned())
+                .width(140.0)
+                .facet_options(STATUSES)
+                .sort_key(move |t: &Task| rank(&STATUSES, t.status))
+                .cell(move |ui, t: &Task| {
+                    let (dot, _) =
+                        ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                    ui.painter()
+                        .circle_filled(dot.center(), 4.0, status_color(t.status));
+                    ui.label(t.status);
+                }),
+        )
+        .column(
+            Column::new("priority", "Priority", |t: &Task| t.priority.to_owned())
+                .width(120.0)
+                .facet_options(PRIORITIES)
+                .sort_key(move |t: &Task| rank(&PRIORITIES, t.priority))
+                .cell(|ui, t: &Task| {
+                    let arrow = match t.priority {
+                        "High" => "⬆",
+                        "Low" => "⬇",
+                        _ => "➡",
+                    };
+                    ui.label(egui::RichText::new(arrow).color(secondary));
+                    ui.label(t.priority);
+                }),
+        )
+        .column(Column::new("assignee", "Assignee", |t: &Task| t.assignee.to_owned()).width(200.0))
+        .column(
+            Column::new("estimate", "Estimate", |t: &Task| {
+                format!("{:.1} h", t.estimate)
+            })
+            .width(110.0)
+            .align(egui::Align::Max)
+            .sort_by(|a: &Task, b: &Task| a.estimate.total_cmp(&b.estimate)),
+        )
+        .row_actions(|ui, _t: &Task| {
+            let mut action = None;
+            if ui.add(MenuItem::new("Edit").shortcut("Enter")).clicked() {
+                action = Some(TaskAction::Edit);
+            }
+            if ui.add(MenuItem::new("Duplicate")).clicked() {
+                action = Some(TaskAction::Duplicate);
+            }
+            if ui.add(MenuItem::new("Copy ID")).clicked() {
+                action = Some(TaskAction::CopyId);
+            }
+            sub_menu(ui, "Set status", |ui| {
+                for status in STATUSES {
+                    if ui.add(MenuItem::new(status)).clicked() {
+                        action = Some(TaskAction::SetStatus(status));
+                        ui.close();
+                    }
+                }
+            });
+            menu_separator(ui);
+            if ui.add(MenuItem::new("Delete").shortcut("Del")).clicked() {
+                action = Some(TaskAction::Delete);
+            }
+            action
+        })
+        .show(ui, &mut demo.tasks);
+
+    if let Some((row, action)) = response.action {
+        let id = demo.tasks[row].id;
+        demo.table_log = match action {
+            TaskAction::Edit => format!("edit TASK-{id}"),
+            TaskAction::Duplicate => {
+                let mut copy = demo.tasks[row].clone();
+                copy.id = demo.next_task;
+                demo.next_task += 1;
+                demo.tasks.insert(row + 1, copy);
+                format!("duplicated TASK-{id} as TASK-{}", demo.next_task - 1)
+            }
+            TaskAction::CopyId => {
+                ui.ctx().copy_text(format!("TASK-{id}"));
+                format!("copied TASK-{id}")
+            }
+            TaskAction::SetStatus(status) => {
+                demo.tasks[row].status = status;
+                format!("TASK-{id} is now {status}")
+            }
+            TaskAction::Delete => {
+                demo.tasks.remove(row);
+                format!("deleted TASK-{id}")
+            }
+        };
+    }
+    if response.rows_reordered {
+        demo.table_log = "moved a row".to_owned();
+    }
+
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        let selected = response.selected;
+        ui.add_enabled_ui(!selected.is_empty(), |ui| {
+            if ui
+                .add(Button::new(format!("Mark {} done", selected.len())))
+                .clicked()
+            {
+                for &i in &selected {
+                    demo.tasks[i].status = "Done";
+                }
+                demo.table_log = format!("marked {} task(s) done", selected.len());
+            }
+            if ui
+                .add(Button::new(format!("Delete {}", selected.len())))
+                .clicked()
+            {
+                for &i in selected.iter().rev() {
+                    demo.tasks.remove(i);
+                }
+                demo.table_log = format!("deleted {} task(s)", selected.len());
+            }
+        });
+        if ui.add(Button::new("Restore sample data")).clicked() {
+            demo.tasks = sample_tasks();
+            demo.table_log = "restored the sample data".to_owned();
+        }
+    });
+    ui.label(
+        theme
+            .typography
+            .caption
+            .rich(format!("Last action: {}", demo.table_log)),
+    );
 }
 
 fn pickers_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {

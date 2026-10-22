@@ -16,7 +16,8 @@ top panes), `ScaffoldPage`, `TabView`, `BreadcrumbBar` and `TreeView`, and the
 pickers: `CalendarView`, `CalendarDatePicker`, `DatePicker`, `TimePicker` and
 `ColorPicker`, plus `Rating`, `AutoSuggestBox`, `ListTile`, menu submenus,
 `Acrylic`/`Mica`, page transitions and localized built-in strings in 41
-languages. Dates and times use the crate's own small `Date` and `Time`
+languages. Beyond fluent_ui there is a `DataTable` in the spirit of TanStack
+Table and shadcn/ui's data table. Dates and times use the crate's own small `Date` and `Time`
 types, so no date library is pulled in.
 
 ```rust
@@ -93,6 +94,11 @@ and `SEGOE_ICONS_TTF` environment variables.
    are in.
 8. ✅ Polish: clear button in text fields, Slider value tooltip and vertical
    slider, TeachingTip tail, bundled Selawik Semibold for headings.
+9. ✅ DataTable (not in fluent_ui): column definitions with formatting and
+   custom cells, multi-column sorting, search, text and faceted filters,
+   pagination with a page size box, row selection with checkboxes, row action
+   menus, column visibility, column resizing, horizontal and vertical scrolling,
+   and drag and drop to reorder rows and columns.
 
 ## Localization
 
