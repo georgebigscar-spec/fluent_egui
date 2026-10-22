@@ -43,6 +43,7 @@ impl Widget for ToggleSwitch<'_> {
             ui,
             Vec2::new(40.0, 20.0),
             10.0,
+            0.0,
             self.text,
             Sense::click_and_drag(),
         );

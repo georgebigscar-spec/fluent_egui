@@ -11,13 +11,18 @@ use crate::utils::{ControlState, States, paint_focus_border};
 pub struct RadioButton {
     checked: bool,
     text: Option<WidgetText>,
+    min_height: f32,
 }
+
+/// WinUI's `RadioButton` `MinHeight`, which spaces out stacked radio buttons.
+const DEFAULT_MIN_HEIGHT: f32 = 32.0;
 
 impl RadioButton {
     pub fn new(checked: bool, text: impl Into<WidgetText>) -> Self {
         Self {
             checked,
             text: Some(text.into()),
+            min_height: DEFAULT_MIN_HEIGHT,
         }
     }
 
@@ -25,7 +30,15 @@ impl RadioButton {
         Self {
             checked,
             text: None,
+            min_height: DEFAULT_MIN_HEIGHT,
         }
+    }
+
+    /// Height of the row. Defaults to 32, like WinUI, so a stack of radio
+    /// buttons gets breathing room; pass 0 for the compact fluent_ui size.
+    pub fn min_height(mut self, min_height: f32) -> Self {
+        self.min_height = min_height;
+        self
     }
 }
 
@@ -53,8 +66,14 @@ impl Widget for RadioButton {
             .as_ref()
             .map(|t| t.text().to_owned())
             .unwrap_or_default();
-        let (response, circle, text) =
-            allocate_labeled(ui, Vec2::splat(20.0), 6.0, self.text, Sense::click());
+        let (response, circle, text) = allocate_labeled(
+            ui,
+            Vec2::splat(20.0),
+            6.0,
+            self.min_height,
+            self.text,
+            Sense::click(),
+        );
         response.widget_info(|| {
             WidgetInfo::selected(Role::RadioButton, ui.is_enabled(), self.checked, &label)
         });

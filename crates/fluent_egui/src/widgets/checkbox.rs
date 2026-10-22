@@ -58,7 +58,7 @@ impl Widget for Checkbox<'_> {
             .map(|t| t.text().to_owned())
             .unwrap_or_default();
         let (mut response, boxed, text) =
-            allocate_labeled(ui, Vec2::splat(20.0), 8.0, self.text, Sense::click());
+            allocate_labeled(ui, Vec2::splat(20.0), 8.0, 0.0, self.text, Sense::click());
 
         let current = match &self.value {
             Value::Bool(b) => Some(**b),

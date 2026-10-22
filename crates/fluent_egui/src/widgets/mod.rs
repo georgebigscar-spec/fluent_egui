@@ -29,12 +29,13 @@ use egui::{Galley, Pos2, Rect, Response, Sense, TextWrapMode, Ui, Vec2, WidgetTe
 use crate::FluentTheme;
 
 /// Layout shared by checkbox-like controls: an indicator of `indicator` size,
-/// then `gap`, then an optional label. Returns the response for the whole row,
+/// then `gap`, then an optional label, in a row at least `min_height` tall. Returns the response for the whole row,
 /// the indicator rect and the placed label.
 pub(crate) fn allocate_labeled(
     ui: &mut Ui,
     indicator: Vec2,
     gap: f32,
+    min_height: f32,
     text: Option<WidgetText>,
     sense: Sense,
 ) -> (Response, Rect, Option<(Pos2, Arc<Galley>)>) {
@@ -55,7 +56,7 @@ pub(crate) fn allocate_labeled(
             } else {
                 0.0
             },
-        indicator.y.max(text_size.y),
+        indicator.y.max(text_size.y).max(min_height),
     );
     let (rect, response) = ui.allocate_exact_size(size, sense);
     let indicator_rect = Rect::from_min_size(
