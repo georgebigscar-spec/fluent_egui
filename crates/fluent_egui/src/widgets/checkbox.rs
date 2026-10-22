@@ -95,56 +95,8 @@ impl Widget for Checkbox<'_> {
 
         if ui.is_rect_visible(response.rect) {
             let state = ControlState::from_response(&response);
+            paint_box(ui, response.id, boxed, state, current);
             let painter = ui.painter();
-            let on = current != Some(false);
-            let (fill, border) = if on {
-                let fill = accent_fill(&theme).resolve(state);
-                let border = if state.disabled {
-                    r.control_strong_stroke_color_disabled
-                } else {
-                    fill
-                };
-                (fill, border)
-            } else {
-                let fill = States::new(
-                    r.control_alt_fill_color_secondary,
-                    r.control_alt_fill_color_tertiary,
-                    r.control_alt_fill_color_quarternary,
-                    r.control_alt_fill_color_disabled,
-                )
-                .resolve(state);
-                let border = if state.disabled || state.pressed {
-                    r.control_strong_stroke_color_disabled
-                } else {
-                    r.control_strong_stroke_color_default
-                };
-                (fill, border)
-            };
-            let id = response.id;
-            let fill = animate_color(
-                ui.ctx(),
-                id.with("fill"),
-                fill,
-                theme.faster_animation_duration,
-            );
-            let border = animate_color(
-                ui.ctx(),
-                id.with("border"),
-                border,
-                theme.faster_animation_duration,
-            );
-            painter.rect_filled(boxed, 6.0, fill);
-            painter.rect_stroke(boxed, 6.0, Stroke::new(1.0, border), StrokeKind::Inside);
-
-            let mark = on_accent_text(&theme).resolve(state);
-            match current {
-                Some(true) => paint_check_mark(painter, boxed, mark),
-                None => {
-                    let dash = Rect::from_center_size(boxed.center(), Vec2::new(8.0, 1.4));
-                    painter.rect_filled(dash, 0.0, mark);
-                }
-                Some(false) => {}
-            }
             if let Some((pos, galley)) = text {
                 let color = if state.disabled {
                     r.text_fill_color_disabled
@@ -158,6 +110,68 @@ impl Widget for Checkbox<'_> {
             }
         }
         response
+    }
+}
+
+/// The 20px box of a checkbox in `state`, checked, unchecked or (`None`)
+/// indeterminate. Shared with controls that embed checkboxes.
+pub(crate) fn paint_box(
+    ui: &Ui,
+    id: egui::Id,
+    boxed: Rect,
+    state: ControlState,
+    value: Option<bool>,
+) {
+    let theme = FluentTheme::of(ui.ctx());
+    let r = &theme.resources;
+    let painter = ui.painter();
+    let on = value != Some(false);
+    let (fill, border) = if on {
+        let fill = accent_fill(&theme).resolve(state);
+        let border = if state.disabled {
+            r.control_strong_stroke_color_disabled
+        } else {
+            fill
+        };
+        (fill, border)
+    } else {
+        let fill = States::new(
+            r.control_alt_fill_color_secondary,
+            r.control_alt_fill_color_tertiary,
+            r.control_alt_fill_color_quarternary,
+            r.control_alt_fill_color_disabled,
+        )
+        .resolve(state);
+        let border = if state.disabled || state.pressed {
+            r.control_strong_stroke_color_disabled
+        } else {
+            r.control_strong_stroke_color_default
+        };
+        (fill, border)
+    };
+    let fill = animate_color(
+        ui.ctx(),
+        id.with("fill"),
+        fill,
+        theme.faster_animation_duration,
+    );
+    let border = animate_color(
+        ui.ctx(),
+        id.with("border"),
+        border,
+        theme.faster_animation_duration,
+    );
+    painter.rect_filled(boxed, 6.0, fill);
+    painter.rect_stroke(boxed, 6.0, Stroke::new(1.0, border), StrokeKind::Inside);
+
+    let mark = on_accent_text(&theme).resolve(state);
+    match value {
+        Some(true) => paint_check_mark(painter, boxed, mark),
+        None => {
+            let dash = Rect::from_center_size(boxed.center(), Vec2::new(8.0, 1.4));
+            painter.rect_filled(dash, 0.0, mark);
+        }
+        Some(false) => {}
     }
 }
 

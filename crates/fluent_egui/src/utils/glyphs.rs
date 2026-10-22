@@ -98,3 +98,31 @@ pub fn paint_status_icon(
         }
     }
 }
+
+/// The `global_nav_button` hamburger, three 16px lines.
+pub fn paint_hamburger(painter: &Painter, center: Pos2, color: Color32) {
+    let stroke = Stroke::new(1.2, color);
+    for dy in [-5.0, 0.0, 5.0] {
+        painter.line_segment([center + vec2(-8.0, dy), center + vec2(8.0, dy)], stroke);
+    }
+}
+
+/// `chevron_right`, 8px tall and thin, as in breadcrumbs and tree views.
+pub fn paint_chevron_right(painter: &Painter, center: Pos2, color: Color32) {
+    let points = vec![
+        center + vec2(-2.0, -4.0),
+        center + vec2(2.0, 0.0),
+        center + vec2(-2.0, 4.0),
+    ];
+    painter.add(PathShape::line(points, Stroke::new(1.0, color)));
+}
+
+/// `chevron_down`, 8px wide and thin, the open state of [`paint_chevron_right`].
+pub fn paint_chevron_down_small(painter: &Painter, center: Pos2, color: Color32) {
+    let points = vec![
+        center + vec2(-4.0, -2.0),
+        center + vec2(0.0, 2.0),
+        center + vec2(4.0, -2.0),
+    ];
+    painter.add(PathShape::line(points, Stroke::new(1.0, color)));
+}

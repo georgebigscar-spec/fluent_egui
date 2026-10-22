@@ -307,7 +307,7 @@ impl SplitButton {
     }
 }
 
-fn show_menu<R>(
+pub(crate) fn show_menu<R>(
     theme: &FluentTheme,
     anchor: &Response,
     width: Option<f32>,

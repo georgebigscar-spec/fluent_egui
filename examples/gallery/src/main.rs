@@ -6,11 +6,13 @@
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
-    AccentColor, Brightness, Button, Card, Checkbox, ComboBox, CommandBar, ContentDialog,
-    DialogResult, Divider, DropDownButton, Expander, FluentTheme, FluentTooltip as _,
-    IconButtonMode, InfoBadge, InfoBar, InfoLabel, MenuBar, MenuItem, NumberBox, PasswordBox,
-    ProgressBar, ProgressRing, Severity, Slider, SplitButton, TeachingTip, TextBox, ToggleSwitch,
-    colors, combo_value, context_menu, fonts, menu_separator, radio_value,
+    AccentColor, BreadcrumbBar, Brightness, Button, Card, Checkbox, ComboBox, CommandBar,
+    ContentDialog, DialogResult, Divider, DropDownButton, Expander, FluentTheme,
+    FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel, MenuBar, MenuItem,
+    NavigationView, NumberBox, PaneDisplayMode, PaneItem, PasswordBox, ProgressBar, ProgressRing,
+    ScaffoldPage, Severity, Slider, SplitButton, Tab, TabView, TeachingTip, TextBox, ToggleSwitch,
+    TreeView, TreeViewItem, TreeViewSelectionMode, colors, combo_value, context_menu, fonts,
+    menu_separator, radio_value,
 };
 
 fn main() -> eframe::Result {
@@ -35,29 +37,56 @@ enum Page {
     Menus,
     Surfaces,
     Flyouts,
+    Navigation,
     Progress,
     Status,
     Colors,
     Typography,
     Divider,
     Icons,
+    Settings,
+}
+
+/// A pane entry: a section header, or a page with its icon and title.
+enum Entry {
+    Header(&'static str),
+    Page(Page, &'static str, &'static str),
 }
 
 impl Page {
-    const ALL: [(Page, &'static str); 12] = [
-        (Page::Buttons, "Buttons"),
-        (Page::Inputs, "Inputs"),
-        (Page::TextInput, "Text fields"),
-        (Page::Menus, "Drop-downs"),
-        (Page::Surfaces, "Surfaces"),
-        (Page::Flyouts, "Flyouts & menus"),
-        (Page::Progress, "Progress"),
-        (Page::Status, "InfoBadge & InfoLabel"),
-        (Page::Colors, "Colors"),
-        (Page::Typography, "Typography"),
-        (Page::Divider, "Divider"),
-        (Page::Icons, "Icons"),
+    const PANE: [Entry; 17] = [
+        Entry::Header("Controls"),
+        Entry::Page(Page::Buttons, "🔘", "Buttons"),
+        Entry::Page(Page::Inputs, "☑", "Inputs"),
+        Entry::Page(Page::TextInput, "✏", "Text fields"),
+        Entry::Page(Page::Menus, "⏷", "Drop-downs"),
+        Entry::Header("Layout"),
+        Entry::Page(Page::Surfaces, "🗖", "Surfaces"),
+        Entry::Page(Page::Flyouts, "💬", "Flyouts & menus"),
+        Entry::Page(Page::Navigation, "🗺", "Navigation"),
+        Entry::Header("Status"),
+        Entry::Page(Page::Progress, "⏳", "Progress"),
+        Entry::Page(Page::Status, "🔔", "InfoBadge & InfoLabel"),
+        Entry::Header("Theming"),
+        Entry::Page(Page::Colors, "🎨", "Colors"),
+        Entry::Page(Page::Typography, "🔤", "Typography"),
+        Entry::Page(Page::Divider, "➖", "Divider"),
+        Entry::Page(Page::Icons, "⭐", "Icons"),
     ];
+
+    fn all() -> impl Iterator<Item = (Page, &'static str)> {
+        Self::PANE
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Page(page, _, title) => Some((*page, *title)),
+                Entry::Header(_) => None,
+            })
+            .chain([(Page::Settings, "Settings")])
+    }
+
+    fn title(self) -> &'static str {
+        Self::all().find(|(p, _)| *p == self).map_or("", |(_, t)| t)
+    }
 }
 
 struct Gallery {
@@ -66,6 +95,7 @@ struct Gallery {
     accent: usize,
     icon_fonts: Vec<&'static str>,
     icon_filter: String,
+    nav_mode: PaneDisplayMode,
     demo: Demo,
 }
 
@@ -92,6 +122,12 @@ struct Demo {
     info_visible: bool,
     dialog_open: bool,
     tip_open: bool,
+    tabs: Vec<(u32, String)>,
+    next_tab: u32,
+    current_tab: usize,
+    path: Vec<&'static str>,
+    tree_single: Vec<&'static str>,
+    tree_multiple: Vec<&'static str>,
 }
 
 impl Default for Demo {
@@ -118,6 +154,12 @@ impl Default for Demo {
             info_visible: true,
             dialog_open: false,
             tip_open: false,
+            tabs: (1..=3).map(|i| (i, format!("Document {i}"))).collect(),
+            next_tab: 4,
+            current_tab: 0,
+            path: BREADCRUMB.to_vec(),
+            tree_single: vec!["vacation.jpg"],
+            tree_multiple: vec!["cv.pdf"],
         }
     }
 }
@@ -142,10 +184,9 @@ impl Gallery {
             page: std::env::var("GALLERY_PAGE")
                 .ok()
                 .and_then(|name| {
-                    Page::ALL
-                        .iter()
+                    Page::all()
                         .find(|(_, title)| title.to_lowercase().starts_with(&name.to_lowercase()))
-                        .map(|(page, _)| *page)
+                        .map(|(page, _)| page)
                 })
                 .unwrap_or(Page::Buttons),
             brightness: if std::env::var_os("GALLERY_DARK").is_some() {
@@ -156,6 +197,16 @@ impl Gallery {
             accent: 5, // blue
             icon_fonts,
             icon_filter: String::new(),
+            // GALLERY_NAV picks the pane display mode by name.
+            nav_mode: std::env::var("GALLERY_NAV")
+                .ok()
+                .and_then(|name| {
+                    NAV_MODES
+                        .iter()
+                        .find(|(_, n)| n.eq_ignore_ascii_case(&name))
+                        .map(|(m, _)| *m)
+                })
+                .unwrap_or_default(),
             demo: Demo::default(),
         };
         gallery.install_theme(ctx);
@@ -175,81 +226,207 @@ impl eframe::App for Gallery {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let theme = FluentTheme::of(&ctx);
-
-        egui::Panel::left("navigation")
-            .resizable(false)
-            .exact_size(220.0)
-            .show_separator_line(false)
-            .show(ui, |ui| {
-                ui.add_space(12.0);
-                ui.label(theme.typography.subtitle.rich("fluent_egui"));
-                ui.add_space(8.0);
-                for (page, name) in Page::ALL {
-                    ui.selectable_value(&mut self.page, page, name);
-                }
-                ui.add_space(8.0);
-                ui.add(Divider::horizontal());
-                ui.add_space(8.0);
-
-                let mut changed = false;
-                ui.horizontal(|ui| {
-                    changed |= ui
-                        .selectable_value(&mut self.brightness, Brightness::Light, "Light")
-                        .changed();
-                    changed |= ui
-                        .selectable_value(&mut self.brightness, Brightness::Dark, "Dark")
-                        .changed();
-                });
-                ui.label(theme.typography.caption.rich("Accent"));
-                ui.horizontal_wrapped(|ui| {
-                    for (i, (name, accent)) in colors::ACCENT_COLORS.iter().enumerate() {
-                        let (rect, response) =
-                            ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
-                        ui.painter().rect_filled(rect, 4.0, accent.normal);
-                        if i == self.accent {
-                            ui.painter().rect_stroke(
-                                rect,
-                                4.0,
-                                egui::Stroke::new(2.0, theme.resources.text_fill_color_primary),
-                                egui::StrokeKind::Outside,
-                            );
-                        }
-                        if response.on_hover_text(*name).clicked() {
-                            self.accent = i;
-                            changed = true;
-                        }
-                    }
-                });
-                if changed {
-                    self.install_theme(&ctx);
-                }
-            });
-
-        egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false; 2])
-                .show(ui, |ui| match self.page {
-                    Page::Buttons => buttons_page(ui, &theme, &mut self.demo, &self.icon_fonts),
-                    Page::Inputs => inputs_page(ui, &theme, &mut self.demo),
-                    Page::TextInput => text_page(ui, &theme, &mut self.demo),
-                    Page::Menus => menus_page(ui, &theme, &mut self.demo),
-                    Page::Surfaces => surfaces_page(ui, &theme, &mut self.demo),
-                    Page::Flyouts => flyouts_page(ui, &theme, &mut self.demo),
-                    Page::Progress => progress_page(ui, &theme, &mut self.demo),
-                    Page::Status => status_page(ui, &theme, &mut self.demo),
-                    Page::Colors => colors_page(ui, &theme),
-                    Page::Typography => typography_page(ui, &theme),
-                    Page::Divider => divider_page(ui, &theme),
-                    Page::Icons => icons_page(ui, &theme, &self.icon_fonts, &mut self.icon_filter),
-                });
+        let items = Page::PANE.iter().map(|e| match e {
+            Entry::Header(text) => PaneItem::header(*text),
+            Entry::Page(page, icon, title) => PaneItem::new(*page, *title).icon(*icon),
         });
+        let current = self.page;
+        let mut page = current;
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(theme.mica_background_color))
+            .show(ui, |ui| {
+                NavigationView::new("gallery_nav")
+                    .title("fluent_egui")
+                    .display_mode(self.nav_mode)
+                    .items(items)
+                    .footer_items([PaneItem::new(Page::Settings, "Settings").icon("⚙")])
+                    .show(ui, &mut page, |ui| {
+                        ScaffoldPage::new()
+                            .header(current.title())
+                            .show(ui, |ui| match current {
+                                Page::Buttons => {
+                                    buttons_page(ui, &theme, &mut self.demo, &self.icon_fonts)
+                                }
+                                Page::Inputs => inputs_page(ui, &theme, &mut self.demo),
+                                Page::TextInput => text_page(ui, &theme, &mut self.demo),
+                                Page::Menus => menus_page(ui, &theme, &mut self.demo),
+                                Page::Surfaces => surfaces_page(ui, &theme, &mut self.demo),
+                                Page::Flyouts => flyouts_page(ui, &theme, &mut self.demo),
+                                Page::Navigation => navigation_page(ui, &theme, &mut self.demo),
+                                Page::Progress => progress_page(ui, &theme, &mut self.demo),
+                                Page::Status => status_page(ui, &theme, &mut self.demo),
+                                Page::Colors => colors_page(ui, &theme),
+                                Page::Typography => typography_page(ui, &theme),
+                                Page::Divider => divider_page(ui, &theme),
+                                Page::Icons => {
+                                    icons_page(ui, &theme, &self.icon_fonts, &mut self.icon_filter)
+                                }
+                                Page::Settings => {
+                                    if settings_page(ui, &theme, self) {
+                                        self.install_theme(&ctx);
+                                    }
+                                }
+                            });
+                    });
+            });
+        self.page = page;
     }
 }
 
-fn page_title(ui: &mut egui::Ui, theme: &FluentTheme, title: &str) {
+const NAV_MODES: [(PaneDisplayMode, &str); 5] = [
+    (PaneDisplayMode::Auto, "Auto"),
+    (PaneDisplayMode::Open, "Open"),
+    (PaneDisplayMode::Compact, "Compact"),
+    (PaneDisplayMode::Minimal, "Minimal"),
+    (PaneDisplayMode::Top, "Top"),
+];
+
+/// Returns whether the theme changed.
+fn settings_page(ui: &mut egui::Ui, theme: &FluentTheme, gallery: &mut Gallery) -> bool {
+    let mut changed = false;
+    section(ui, theme, "Theme mode");
+    changed |= radio_value(ui, &mut gallery.brightness, Brightness::Light, "Light").changed();
+    changed |= radio_value(ui, &mut gallery.brightness, Brightness::Dark, "Dark").changed();
+
+    section(ui, theme, "Accent color");
+    ui.horizontal_wrapped(|ui| {
+        for (i, (name, accent)) in colors::ACCENT_COLORS.iter().enumerate() {
+            let (rect, response) =
+                ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::click());
+            ui.painter().rect_filled(rect, 4.0, accent.normal);
+            if i == gallery.accent {
+                ui.painter().rect_stroke(
+                    rect,
+                    4.0,
+                    egui::Stroke::new(2.0, theme.resources.text_fill_color_primary),
+                    egui::StrokeKind::Outside,
+                );
+            }
+            if response.fluent_tooltip(*name).clicked() {
+                gallery.accent = i;
+                changed = true;
+            }
+        }
+    });
+
+    section(ui, theme, "Navigation pane");
+    let current = NAV_MODES
+        .iter()
+        .find(|(m, _)| *m == gallery.nav_mode)
+        .map_or("", |(_, n)| n);
+    ComboBox::new("nav_mode", current).show_ui(ui, |ui| {
+        for (mode, name) in NAV_MODES {
+            combo_value(ui, &mut gallery.nav_mode, mode, name);
+        }
+    });
+    changed
+}
+
+fn navigation_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    section(ui, theme, "NavigationView");
+    ui.label("This gallery is a NavigationView. Change its display mode under Settings.");
+
+    section(
+        ui,
+        theme,
+        "TabView (drag tabs to reorder, middle-click to close)",
+    );
+    let tabs = demo
+        .tabs
+        .iter()
+        .map(|(id, title)| Tab::new(title.as_str()).icon("📄").id_salt(*id));
+    let response = TabView::new("demo_tabs").min_body_height(120.0).show(
+        ui,
+        &mut demo.current_tab,
+        tabs,
+        |ui, i| {
+            egui::Frame::NONE
+                .inner_margin(16)
+                .show(ui, |ui| match demo.tabs.get(i) {
+                    Some((_, title)) => ui.label(format!("Content of {title}")),
+                    None => ui.label("No tabs open. Press + to add one."),
+                });
+        },
+    );
+    if let Some(i) = response.closed {
+        demo.tabs.remove(i);
+        if demo.current_tab > i || demo.current_tab >= demo.tabs.len() {
+            demo.current_tab = demo.current_tab.saturating_sub(1);
+        }
+    }
+    if let Some((from, to)) = response.moved {
+        let tab = demo.tabs.remove(from);
+        demo.tabs.insert(to, tab);
+    }
+    if response.added {
+        demo.tabs
+            .push((demo.next_tab, format!("Document {}", demo.next_tab)));
+        demo.next_tab += 1;
+        demo.current_tab = demo.tabs.len() - 1;
+    }
+
+    section(ui, theme, "BreadcrumbBar (click a crumb to go back)");
+    if let Some(i) = BreadcrumbBar::new(demo.path.iter().copied()).show(ui) {
+        demo.path.truncate(i + 1);
+    }
+    if demo.path.len() < BREADCRUMB.len() && ui.add(Button::new("Reset path")).clicked() {
+        demo.path = BREADCRUMB.to_vec();
+    }
     ui.add_space(8.0);
-    ui.label(theme.typography.title.rich(title));
-    ui.add_space(12.0);
+    egui::Frame::NONE.show(ui, |ui| {
+        ui.set_max_width(260.0);
+        BreadcrumbBar::new(BREADCRUMB).show(ui);
+    });
+    ui.label(
+        theme
+            .typography
+            .caption
+            .rich("The same path in 260px collapses into a menu."),
+    );
+
+    section(ui, theme, "TreeView");
+    ui.horizontal_top(|ui| {
+        ui.vertical(|ui| {
+            ui.set_width(280.0);
+            ui.label(theme.typography.caption.rich("Single selection"));
+            TreeView::new("tree_single").show(ui, &file_tree(), &mut demo.tree_single);
+        });
+        ui.vertical(|ui| {
+            ui.set_width(280.0);
+            ui.label(theme.typography.caption.rich("Multiple selection"));
+            TreeView::new("tree_multiple")
+                .selection_mode(TreeViewSelectionMode::Multiple)
+                .show(ui, &file_tree(), &mut demo.tree_multiple);
+        });
+    });
+}
+
+const BREADCRUMB: [&str; 5] = ["Home", "Documents", "Design", "Northwind", "Specs"];
+
+fn file_tree() -> Vec<TreeViewItem<&'static str>> {
+    vec![
+        TreeViewItem::new("work", "Work Documents")
+            .leading("📁")
+            .expanded(true)
+            .children([
+                TreeViewItem::new("plan", "XYZ Functional Spec").leading("📄"),
+                TreeViewItem::new("feature", "Feature Schedule").leading("📄"),
+                TreeViewItem::new("overview", "Overview").leading("📄"),
+            ]),
+        TreeViewItem::new("personal", "Personal Documents")
+            .leading("📁")
+            .expanded(true)
+            .children([
+                TreeViewItem::new("home", "Home Remodel")
+                    .leading("📁")
+                    .children([
+                        TreeViewItem::new("contractor", "Contractor Contact Info").leading("📄"),
+                        TreeViewItem::new("paint", "Paint Color Scheme").leading("📄"),
+                    ]),
+                TreeViewItem::new("cv.pdf", "CV.pdf").leading("📄"),
+                TreeViewItem::new("vacation.jpg", "vacation.jpg").leading("🖼"),
+            ]),
+    ]
 }
 
 /// A color chip with its name underneath, allocated as one fixed-size rect so
@@ -277,7 +454,6 @@ fn swatch(ui: &mut egui::Ui, theme: &FluentTheme, color: egui::Color32, name: &s
 }
 
 fn colors_page(ui: &mut egui::Ui, theme: &FluentTheme) {
-    page_title(ui, theme, "Colors");
     ui.label(theme.typography.body_strong.rich("Accent shades"));
     let a = theme.accent_color;
     ui.horizontal_wrapped(|ui| {
@@ -333,7 +509,6 @@ fn colors_page(ui: &mut egui::Ui, theme: &FluentTheme) {
 }
 
 fn typography_page(ui: &mut egui::Ui, theme: &FluentTheme) {
-    page_title(ui, theme, "Typography");
     for (name, style) in theme.typography.styles() {
         ui.horizontal(|ui| {
             ui.add_sized(
@@ -351,7 +526,6 @@ fn typography_page(ui: &mut egui::Ui, theme: &FluentTheme) {
 }
 
 fn divider_page(ui: &mut egui::Ui, theme: &FluentTheme) {
-    page_title(ui, theme, "Divider");
     ui.label(theme.typography.body.rich("Horizontal"));
     ui.add(Divider::horizontal().size(400.0));
     ui.add_space(16.0);
@@ -369,7 +543,6 @@ fn icons_page(
     installed: &[&'static str],
     filter: &mut String,
 ) {
-    page_title(ui, theme, "Icons");
     if installed.is_empty() {
         ui.label(theme.typography.body.rich(
             "Icon fonts are not bundled. Set FLUENT_ICONS_TTF and/or SEGOE_ICONS_TTF \
@@ -409,7 +582,6 @@ fn disabled_switch(ui: &mut egui::Ui, demo: &mut Demo) {
 }
 
 fn buttons_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo, icon_fonts: &[&str]) {
-    page_title(ui, theme, "Buttons");
     disabled_switch(ui, demo);
     let enabled = !demo.disabled;
 
@@ -468,7 +640,6 @@ fn buttons_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo, icon_fo
 }
 
 fn inputs_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "Inputs");
     disabled_switch(ui, demo);
     let enabled = !demo.disabled;
 
@@ -513,7 +684,6 @@ fn inputs_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 }
 
 fn progress_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "Progress");
     section(ui, theme, "Determinate");
     ui.add(Slider::new(&mut demo.progress, 0.0..=100.0));
     ui.add_space(8.0);
@@ -531,7 +701,6 @@ fn progress_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 }
 
 fn status_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "InfoBadge & InfoLabel");
     section(ui, theme, "InfoBadge");
     for severity in [
         Severity::Info,
@@ -560,7 +729,6 @@ fn status_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 }
 
 fn text_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "Text fields");
     disabled_switch(ui, demo);
     let enabled = !demo.disabled;
 
@@ -609,7 +777,6 @@ fn text_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 }
 
 fn menus_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "Drop-downs");
     disabled_switch(ui, demo);
     let enabled = !demo.disabled;
 
@@ -665,7 +832,6 @@ fn menus_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 }
 
 fn surfaces_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "Surfaces");
     let width = ui.available_width().min(560.0);
     ui.allocate_ui(egui::vec2(width, 0.0), |ui| {
         section(ui, theme, "Card");
@@ -719,8 +885,6 @@ fn surfaces_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 }
 
 fn flyouts_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
-    page_title(ui, theme, "Flyouts & menus");
-
     section(ui, theme, "MenuBar");
     MenuBar::new().show(ui, |bar| {
         bar.menu("File", |ui| {

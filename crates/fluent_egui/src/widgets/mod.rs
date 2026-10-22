@@ -1,6 +1,7 @@
 //! Fluent widgets. The layout mirrors fluent_ui's `lib/src/controls`.
 
 mod bars;
+mod breadcrumb_bar;
 mod button;
 mod card;
 mod checkbox;
@@ -12,15 +13,20 @@ mod info_badge;
 mod info_bar;
 mod info_label;
 mod menu;
+mod navigation_view;
 mod number_box;
 mod progress;
 mod radio_button;
+mod scaffold_page;
 mod slider;
+mod tab_view;
 mod text_box;
 mod toggle_switch;
 mod tooltip;
+mod tree_view;
 
 pub use bars::{CommandBar, CommandBarUi, MenuBar, MenuBarUi, TeachingTip, TeachingTipResponse};
+pub use breadcrumb_bar::BreadcrumbBar;
 pub use button::{Button, ButtonKind, ButtonStyle, IconButtonMode};
 pub use card::Card;
 pub use checkbox::Checkbox;
@@ -35,13 +41,17 @@ pub use menu::{
     ComboBox, DropDownButton, MenuItem, SplitButton, SplitButtonResponse, combo_value,
     context_menu, flyout_frame, menu_separator,
 };
+pub use navigation_view::{NavigationView, NavigationViewResponse, PaneDisplayMode, PaneItem};
 pub use number_box::{NumberBox, SpinButtonPlacement};
 pub use progress::{ProgressBar, ProgressRing};
 pub use radio_button::{RadioButton, radio_value};
+pub use scaffold_page::ScaffoldPage;
 pub use slider::Slider;
+pub use tab_view::{CloseButtonVisibility, Tab, TabView, TabViewResponse, TabWidthBehavior};
 pub use text_box::{PasswordBox, PasswordRevealMode, TextBox};
 pub use toggle_switch::ToggleSwitch;
 pub use tooltip::{FluentTooltip, tooltip_frame};
+pub use tree_view::{TreeView, TreeViewItem, TreeViewResponse, TreeViewSelectionMode};
 
 use std::sync::Arc;
 

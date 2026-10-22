@@ -11,7 +11,8 @@ Windows 11 type ramp), icon codepoints, and the basic controls: `Button`
 `PasswordBox`, `NumberBox`, `DropDownButton`, `SplitButton` and `ComboBox`,
 and the surfaces and flyouts: `Card`, `Expander`, `InfoBar`, tooltips,
 `MenuFlyout`/context menus, `ContentDialog`, `MenuBar`, `CommandBar` and
-`TeachingTip`.
+`TeachingTip`, and navigation: `NavigationView` (open, compact, minimal and
+top panes), `ScaffoldPage`, `TabView`, `BreadcrumbBar` and `TreeView`.
 
 ```rust
 use fluent_egui::{Brightness, FluentTheme};
@@ -62,7 +63,9 @@ and `SEGOE_ICONS_TTF` environment variables.
 4. ✅ Surfaces and flyouts: Card, Expander, ListTile, InfoBar, Tooltip, Flyout,
    MenuFlyout, ContentDialog, CommandBar, MenuBar, TeachingTip. (ListTile and
    submenus are still to do.)
-5. Navigation: ScaffoldPage, NavigationView, TabView, BreadcrumbBar, TreeView.
+5. ✅ Navigation: ScaffoldPage, NavigationView, TabView, BreadcrumbBar, TreeView.
+   (Nested pane items, AutoSuggestBox in the pane and tab keyboard shortcuts
+   are still to do.)
 6. Pickers: DatePicker, TimePicker, CalendarView, ColorPicker.
 7. Extras: Acrylic/Mica, page transitions, DynamicOverflow, localization.
 
