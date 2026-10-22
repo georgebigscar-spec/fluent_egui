@@ -208,7 +208,9 @@ impl FluentTheme {
             Visuals::light()
         };
 
-        v.override_text_color = Some(r.text_fill_color_primary);
+        // Left unset on purpose: an override would also recolor the text
+        // Fluent widgets paint themselves (e.g. white on accent).
+        v.override_text_color = None;
         v.hyperlink_color = accent;
         v.panel_fill = r.solid_background_fill_color_base;
         v.window_fill = self.menu_color;

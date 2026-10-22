@@ -3,8 +3,11 @@
 Fluent Design widgets for [egui](https://github.com/emilk/egui), ported from the
 Flutter package [fluent_ui](https://github.com/bdlukaa/fluent_ui).
 
-Status: early. The theme (WinUI color resources, accent colors, Windows 11 type
-ramp), icon codepoints and `Divider` are in; controls are being ported next.
+Status: early. Done so far: the theme (WinUI color resources, accent colors,
+Windows 11 type ramp), icon codepoints, and the basic controls: `Button`
+(standard, filled, outlined, hyperlink, icon, toggle), `Checkbox`,
+`RadioButton`, `ToggleSwitch`, `Slider`, `ProgressBar`, `ProgressRing`,
+`InfoBadge`, `InfoLabel` and `Divider`.
 
 ```rust
 use fluent_egui::{Brightness, FluentTheme};
@@ -15,7 +18,8 @@ FluentTheme::new(Brightness::Dark).install(ctx);
 // In your UI:
 let theme = FluentTheme::of(ui.ctx());
 ui.label(theme.typography.title.rich("Hello, Fluent"));
-ui.add(fluent_egui::Divider::horizontal());
+if ui.add(fluent_egui::Button::filled("Save")).clicked() { /* ... */ }
+ui.add(fluent_egui::ToggleSwitch::new(&mut dark_mode, "Dark mode"));
 ```
 
 `install` also restyles egui's built-in widgets so they blend in with the
@@ -45,8 +49,8 @@ and `SEGOE_ICONS_TTF` environment variables.
 
 ## Porting roadmap
 
-1. Foundation: theme, palette, typography, icons, focus border, Divider, gallery.
-2. Basic controls: Button, FilledButton, OutlinedButton, IconButton, HyperlinkButton,
+1. ✅ Foundation: theme, palette, typography, icons, focus border, Divider, gallery.
+2. ✅ Basic controls: Button, FilledButton, OutlinedButton, IconButton, HyperlinkButton,
    ToggleButton, Checkbox, RadioButton, ToggleSwitch, Slider, ProgressBar/Ring,
    InfoBadge, InfoLabel.
 3. Input: TextBox, PasswordBox, NumberBox, DropDownButton, SplitButton, ComboBox,

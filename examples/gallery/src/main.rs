@@ -5,7 +5,11 @@
 
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
-use fluent_egui::{AccentColor, Brightness, Divider, FluentTheme, colors, fonts};
+use fluent_egui::{
+    AccentColor, Brightness, Button, Checkbox, Divider, FluentTheme, IconButtonMode, InfoBadge,
+    InfoLabel, ProgressBar, ProgressRing, Severity, Slider, ToggleSwitch, colors, fonts,
+    radio_value,
+};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -23,6 +27,10 @@ fn main() -> eframe::Result {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Page {
+    Buttons,
+    Inputs,
+    Progress,
+    Status,
     Colors,
     Typography,
     Divider,
@@ -30,7 +38,11 @@ enum Page {
 }
 
 impl Page {
-    const ALL: [(Page, &'static str); 4] = [
+    const ALL: [(Page, &'static str); 8] = [
+        (Page::Buttons, "Buttons"),
+        (Page::Inputs, "Inputs"),
+        (Page::Progress, "Progress"),
+        (Page::Status, "InfoBadge & InfoLabel"),
         (Page::Colors, "Colors"),
         (Page::Typography, "Typography"),
         (Page::Divider, "Divider"),
@@ -44,6 +56,40 @@ struct Gallery {
     accent: usize,
     icon_fonts: Vec<&'static str>,
     icon_filter: String,
+    demo: Demo,
+}
+
+/// State for the control pages.
+struct Demo {
+    disabled: bool,
+    clicks: u32,
+    toggled: bool,
+    checked: bool,
+    tristate: Option<bool>,
+    switch: bool,
+    radio: usize,
+    slider: f32,
+    stepped: f32,
+    progress: f32,
+    name: String,
+}
+
+impl Default for Demo {
+    fn default() -> Self {
+        Self {
+            disabled: false,
+            clicks: 0,
+            toggled: false,
+            checked: true,
+            tristate: None,
+            switch: true,
+            radio: 0,
+            slider: 40.0,
+            stepped: 3.0,
+            progress: 65.0,
+            name: String::new(),
+        }
+    }
 }
 
 impl Gallery {
@@ -62,7 +108,16 @@ impl Gallery {
         ctx.set_fonts(defs);
 
         let gallery = Self {
-            page: Page::Colors,
+            // GALLERY_PAGE picks the start page by its title, handy for screenshots.
+            page: std::env::var("GALLERY_PAGE")
+                .ok()
+                .and_then(|name| {
+                    Page::ALL
+                        .iter()
+                        .find(|(_, title)| title.to_lowercase().starts_with(&name.to_lowercase()))
+                        .map(|(page, _)| *page)
+                })
+                .unwrap_or(Page::Buttons),
             brightness: if std::env::var_os("GALLERY_DARK").is_some() {
                 Brightness::Dark
             } else {
@@ -71,6 +126,7 @@ impl Gallery {
             accent: 5, // blue
             icon_fonts,
             icon_filter: String::new(),
+            demo: Demo::default(),
         };
         gallery.install_theme(ctx);
         gallery
@@ -141,6 +197,10 @@ impl eframe::App for Gallery {
 
         egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| match self.page {
+                Page::Buttons => buttons_page(ui, &theme, &mut self.demo, &self.icon_fonts),
+                Page::Inputs => inputs_page(ui, &theme, &mut self.demo),
+                Page::Progress => progress_page(ui, &theme, &mut self.demo),
+                Page::Status => status_page(ui, &theme, &mut self.demo),
                 Page::Colors => colors_page(ui, &theme),
                 Page::Typography => typography_page(ui, &theme),
                 Page::Divider => divider_page(ui, &theme),
@@ -300,4 +360,165 @@ fn icons_page(
             }
         });
     }
+}
+
+fn section(ui: &mut egui::Ui, theme: &FluentTheme, title: &str) {
+    ui.add_space(16.0);
+    ui.label(theme.typography.body_strong.rich(title));
+    ui.add_space(6.0);
+}
+
+fn disabled_switch(ui: &mut egui::Ui, demo: &mut Demo) {
+    ui.add(ToggleSwitch::new(&mut demo.disabled, "Disable controls"));
+}
+
+fn buttons_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo, icon_fonts: &[&str]) {
+    page_title(ui, theme, "Buttons");
+    disabled_switch(ui, demo);
+    let enabled = !demo.disabled;
+
+    section(
+        ui,
+        theme,
+        "Button, FilledButton, OutlinedButton, HyperlinkButton",
+    );
+    ui.horizontal(|ui| {
+        if ui.add_enabled(enabled, Button::new("Standard")).clicked() {
+            demo.clicks += 1;
+        }
+        if ui.add_enabled(enabled, Button::filled("Filled")).clicked() {
+            demo.clicks += 1;
+        }
+        if ui
+            .add_enabled(enabled, Button::outlined("Outlined"))
+            .clicked()
+        {
+            demo.clicks += 1;
+        }
+        if ui
+            .add_enabled(enabled, Button::hyperlink("Hyperlink"))
+            .clicked()
+        {
+            demo.clicks += 1;
+        }
+    });
+    ui.label(
+        theme
+            .typography
+            .caption
+            .rich(format!("Clicked {} times", demo.clicks)),
+    );
+
+    section(ui, theme, "ToggleButton");
+    ui.add_enabled(enabled, Button::toggle(&mut demo.toggled, "Toggle me"));
+
+    section(ui, theme, "IconButton");
+    ui.horizontal(|ui| {
+        let has_font = icon_fonts.contains(&FLUENT_ICONS_FAMILY);
+        for mode in [
+            IconButtonMode::Tiny,
+            IconButtonMode::Small,
+            IconButtonMode::Large,
+        ] {
+            let button = if has_font {
+                Button::icon(fluent_egui::icon(icons::fluent::ADD))
+            } else {
+                Button::icon("+")
+            };
+            ui.add_enabled(enabled, button.icon_mode(mode))
+                .on_hover_text(format!("{mode:?}"));
+        }
+    });
+}
+
+fn inputs_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "Inputs");
+    disabled_switch(ui, demo);
+    let enabled = !demo.disabled;
+
+    section(ui, theme, "Checkbox");
+    ui.add_enabled(enabled, Checkbox::new(&mut demo.checked, "Two-state"));
+    ui.horizontal(|ui| {
+        ui.add_enabled(
+            enabled,
+            Checkbox::tristate(&mut demo.tristate, "Three-state"),
+        );
+        if ui
+            .add_enabled(enabled, Button::hyperlink("Reset to third state"))
+            .clicked()
+        {
+            demo.tristate = None;
+        }
+    });
+
+    section(ui, theme, "RadioButton");
+    ui.add_enabled_ui(enabled, |ui| {
+        for (i, name) in ["Option 1", "Option 2", "Option 3"].into_iter().enumerate() {
+            radio_value(ui, &mut demo.radio, i, name);
+        }
+    });
+
+    section(ui, theme, "ToggleSwitch");
+    let label = if demo.switch { "On" } else { "Off" };
+    ui.add_enabled(enabled, ToggleSwitch::new(&mut demo.switch, label));
+
+    section(ui, theme, "Slider");
+    ui.horizontal(|ui| {
+        ui.add_enabled(enabled, Slider::new(&mut demo.slider, 0.0..=100.0));
+        ui.label(format!("{:.0}", demo.slider));
+    });
+    ui.horizontal(|ui| {
+        ui.add_enabled(
+            enabled,
+            Slider::new(&mut demo.stepped, 0.0..=10.0).step(1.0),
+        );
+        ui.label(format!("{:.0} (step 1)", demo.stepped));
+    });
+}
+
+fn progress_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "Progress");
+    section(ui, theme, "Determinate");
+    ui.add(Slider::new(&mut demo.progress, 0.0..=100.0));
+    ui.add_space(8.0);
+    ui.add(ProgressBar::new(demo.progress).width(300.0));
+    ui.add_space(8.0);
+    ui.add(ProgressRing::new(demo.progress));
+
+    section(ui, theme, "Indeterminate");
+    ui.add(ProgressBar::indeterminate().width(300.0));
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.add(ProgressRing::indeterminate());
+        ui.add(ProgressRing::indeterminate().backwards(true));
+    });
+}
+
+fn status_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "InfoBadge & InfoLabel");
+    section(ui, theme, "InfoBadge");
+    for severity in [
+        Severity::Info,
+        Severity::Warning,
+        Severity::Success,
+        Severity::Error,
+    ] {
+        ui.horizontal(|ui| {
+            ui.add(InfoBadge::dot().severity(severity));
+            ui.add(InfoBadge::new("8").severity(severity));
+            ui.add(InfoBadge::new("99+").severity(severity));
+            ui.label(format!("{severity:?}"));
+        });
+    }
+
+    section(ui, theme, "InfoLabel");
+    InfoLabel::new("Header label").show(ui, |ui| {
+        ui.add(egui::TextEdit::singleline(&mut demo.name).hint_text("Your name"));
+    });
+    ui.add_space(8.0);
+    InfoLabel::new("Label on the side")
+        .header(false)
+        .show(ui, |ui| {
+            ui.add(ToggleSwitch::without_text(&mut demo.switch));
+        });
 }
