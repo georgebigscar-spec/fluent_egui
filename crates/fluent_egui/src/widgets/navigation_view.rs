@@ -148,6 +148,7 @@ struct NavState {
 /// # fn ui(ui: &mut egui::Ui, page: &mut usize) {
 /// use fluent_egui::{NavigationView, PaneItem};
 ///
+/// let current = *page;
 /// NavigationView::new("nav")
 ///     .title("My app")
 ///     .items([
@@ -157,7 +158,7 @@ struct NavState {
 ///     ])
 ///     .footer_items([PaneItem::new(2, "Settings").icon("⚙")])
 ///     .show(ui, page, |ui| {
-///         ui.label(format!("Page {page}"));
+///         ui.label(format!("Page {current}"));
 ///     });
 /// # }
 /// ```
