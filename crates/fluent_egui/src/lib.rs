@@ -16,10 +16,12 @@
 pub mod date;
 pub mod fonts;
 pub mod icons;
+pub mod l10n;
 pub mod theme;
 pub mod utils;
 pub mod widgets;
 
 pub use date::{Date, Time, Weekday};
+pub use l10n::Localizations;
 pub use theme::{AccentColor, Brightness, FluentTheme, ResourceDictionary, Typography, colors};
 pub use widgets::*;

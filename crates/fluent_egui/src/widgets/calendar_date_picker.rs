@@ -6,6 +6,7 @@ use egui::{
 use super::button::{ButtonStyle, paint_border};
 use super::{CalendarView, flyout_frame};
 use crate::FluentTheme;
+use crate::Localizations;
 use crate::date::Date;
 use crate::utils::{ControlState, animate_color, paint_focus_border};
 
@@ -20,7 +21,7 @@ use crate::utils::{ControlState, animate_color, paint_focus_border};
 pub struct CalendarDatePicker<'a> {
     id_salt: IdSalt,
     value: &'a mut Option<Date>,
-    placeholder: String,
+    placeholder: Option<String>,
     min_date: Option<Date>,
     max_date: Option<Date>,
 }
@@ -30,14 +31,14 @@ impl<'a> CalendarDatePicker<'a> {
         Self {
             id_salt: IdSalt::new(id_salt),
             value,
-            placeholder: "Pick a date".to_owned(),
+            placeholder: None,
             min_date: None,
             max_date: None,
         }
     }
 
     pub fn placeholder(mut self, text: impl Into<String>) -> Self {
-        self.placeholder = text.into();
+        self.placeholder = Some(text.into());
         self
     }
 
@@ -62,7 +63,11 @@ impl Widget for CalendarDatePicker<'_> {
             .map(|d| format!("{}/{}/{}", d.month, d.day, d.year));
         let (rect, _) = ui.allocate_exact_size(vec2(160.0, 32.0), Sense::hover());
         let mut response = ui.interact(rect, id, Sense::click());
-        let label = text.clone().unwrap_or_else(|| self.placeholder.clone());
+        let label = text.clone().unwrap_or_else(|| {
+            self.placeholder
+                .clone()
+                .unwrap_or_else(|| Localizations::of(ui.ctx()).pick_a_date.to_owned())
+        });
         response.widget_info(|| WidgetInfo::labeled(Role::Button, ui.is_enabled(), &label));
         let popup_id = Popup::default_response_id(&response);
         let open = Popup::is_id_open(ui.ctx(), popup_id);

@@ -2,6 +2,7 @@ use egui::{Align, Frame, Layout, Margin, Response, Stroke, TextWrapMode, Ui, Vec
 
 use super::{Button, Severity, glyph_button};
 use crate::FluentTheme;
+use crate::Localizations;
 use crate::utils::{StatusGlyph, paint_close, paint_status_icon};
 
 /// What [`InfoBar::show`] returns.
@@ -170,7 +171,7 @@ impl InfoBar {
                 if self.closable {
                     ui.with_layout(Layout::right_to_left(align), |ui| {
                         closed = glyph_button(ui, 30.0, paint_close)
-                            .on_hover_text("Close")
+                            .on_hover_text(Localizations::of(ui.ctx()).close_button_label)
                             .clicked();
                     });
                 }

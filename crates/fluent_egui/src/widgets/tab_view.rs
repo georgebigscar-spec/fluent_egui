@@ -6,6 +6,7 @@ use egui::{
 
 use super::FluentTooltip as _;
 use crate::FluentTheme;
+use crate::Localizations;
 use crate::utils::{ControlState, animate_color, paint_focus_border};
 
 const MIN_TAB_WIDTH: f32 = 80.0;
@@ -251,7 +252,7 @@ impl TabView {
                 });
             if self.add_button {
                 ui.add_space(4.0);
-                let add = add_button(ui).fluent_tooltip("Add new tab");
+                let add = add_button(ui).fluent_tooltip(Localizations::of(ui.ctx()).new_tab_label);
                 if add.clicked() {
                     added = true;
                 }
@@ -360,7 +361,7 @@ impl TabView {
         let close = show_close.then(|| {
             let close = ui
                 .interact(close_rect, id.with("close"), Sense::click())
-                .fluent_tooltip("Close tab");
+                .fluent_tooltip(Localizations::of(ui.ctx()).close_tab_label_suffix);
             let cs = ControlState::from_response(&close);
             let fill = animate_color(
                 ui.ctx(),
@@ -532,7 +533,13 @@ fn add_button(ui: &mut Ui) -> Response {
     let (slot, _) = ui.allocate_exact_size(vec2(BUTTON_WIDTH, TAB_HEIGHT), Sense::hover());
     let rect = Rect::from_center_size(slot.center(), vec2(BUTTON_WIDTH, 28.0));
     let response = ui.interact(rect, slot_id(ui, slot), Sense::click());
-    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, "Add new tab"));
+    response.widget_info(|| {
+        WidgetInfo::labeled(
+            Role::Button,
+            true,
+            Localizations::of(ui.ctx()).new_tab_label,
+        )
+    });
     let state = ControlState::from_response(&response);
     let fill = animate_color(
         ui.ctx(),

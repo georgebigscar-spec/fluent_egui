@@ -5,7 +5,9 @@ use egui::{
 };
 
 use super::FluentTooltip as _;
+use super::PageTransition;
 use crate::FluentTheme;
+use crate::Localizations;
 use crate::utils::{
     ControlState, States, animate_color, paint_focus_border, paint_hamburger, with_alpha,
 };
@@ -169,6 +171,7 @@ pub struct NavigationView<T> {
     footer_items: Vec<PaneItem<T>>,
     display_mode: PaneDisplayMode,
     open_width: f32,
+    transition: Option<PageTransition>,
 }
 
 impl<T: PartialEq + Clone> NavigationView<T> {
@@ -180,6 +183,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             footer_items: Vec::new(),
             display_mode: PaneDisplayMode::Auto,
             open_width: OPEN_WIDTH,
+            transition: None,
         }
     }
 
@@ -208,6 +212,13 @@ impl<T: PartialEq + Clone> NavigationView<T> {
     /// Width of the open pane, 320 by default.
     pub fn open_width(mut self, width: f32) -> Self {
         self.open_width = width;
+        self
+    }
+
+    /// How the body animates when the selection changes. Defaults to
+    /// [`PageTransition::entrance`], or a horizontal slide in top mode.
+    pub fn transition(mut self, transition: PageTransition) -> Self {
+        self.transition = Some(transition);
         self
     }
 
@@ -292,7 +303,16 @@ impl<T: PartialEq + Clone> NavigationView<T> {
                 .max_rect(body_rect),
         );
         body_ui.set_clip_rect(body_rect.intersect(ui.clip_rect()));
-        let inner = add_body(&mut body_ui);
+        let transition = self.transition.unwrap_or_else(|| {
+            if mode == PaneDisplayMode::Top {
+                PageTransition::horizontal_slide(false)
+            } else {
+                PageTransition::entrance()
+            }
+        });
+        let inner = transition
+            .show(&mut body_ui, "fluent_nav_transition", current, add_body)
+            .inner;
         if framed {
             // Only the top and left edges show; the others are pushed out.
             ui.painter().rect_stroke(
@@ -435,7 +455,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
         ui.spacing_mut().item_spacing = Vec2::ZERO;
         let mut out = PaneOutput {
             clicked: None,
-            hamburger: hamburger_button(&mut ui, rect.min, labels.then_some(&self.title)),
+            hamburger: hamburger_button(&mut ui, rect.min, labels.then_some(&self.title), labels),
         };
 
         let footer_height: f32 = if self.footer_items.is_empty() {
@@ -693,7 +713,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
     fn minimal_header(&self, ui: &mut Ui, rect: Rect) -> bool {
         let row = Rect::from_min_size(rect.min, vec2(rect.width(), TOP_ROW_HEIGHT));
         let mut ui = ui.new_child(UiBuilder::new().max_rect(row));
-        hamburger_button(&mut ui, rect.min, Some(&self.title))
+        hamburger_button(&mut ui, rect.min, Some(&self.title), false)
     }
 }
 
@@ -721,8 +741,13 @@ fn subtle_fill(theme: &FluentTheme) -> States<egui::Color32> {
 }
 
 /// The 38x36 hamburger tile at the top left of a pane, with the pane title
-/// beside it when `title` is given.
-fn hamburger_button(ui: &mut Ui, origin: Pos2, title: Option<&Option<WidgetText>>) -> bool {
+/// beside it when `title` is given. `expanded` picks the tooltip.
+fn hamburger_button(
+    ui: &mut Ui,
+    origin: Pos2,
+    title: Option<&Option<WidgetText>>,
+    expanded: bool,
+) -> bool {
     let theme = FluentTheme::of(ui.ctx());
     let r = &theme.resources;
     let tile = Rect::from_min_size(origin + vec2(6.0, 6.0), vec2(COMPACT_WIDTH - 12.0, 36.0));
@@ -731,7 +756,14 @@ fn hamburger_button(ui: &mut Ui, origin: Pos2, title: Option<&Option<WidgetText>
         ui.scope_id().with("fluent_nav_hamburger"),
         Sense::click(),
     );
-    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, "Navigation"));
+    let l10n = Localizations::of(ui.ctx());
+    let tooltip = if expanded {
+        l10n.close_navigation_tooltip
+    } else {
+        l10n.open_navigation_tooltip
+    };
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, tooltip));
+    let response = response.fluent_tooltip(tooltip);
     let state = ControlState::from_response(&response);
     let fill = animate_color(
         ui.ctx(),

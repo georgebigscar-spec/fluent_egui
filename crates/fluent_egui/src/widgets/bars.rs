@@ -5,6 +5,7 @@ use egui::{
 
 use super::{Button, flyout_frame, glyph_button};
 use crate::FluentTheme;
+use crate::Localizations;
 use crate::utils::{ControlState, States, animate_color, paint_close, paint_focus_border};
 
 /// A transparent text button for bars: subtle fill on hover and press.
@@ -226,7 +227,8 @@ impl CommandBar {
             ui.spacing_mut().item_spacing.x = 2.0;
             let r = add_primary(&mut CommandBarUi { ui });
             if let Some(add_secondary) = add_secondary {
-                let more = bar_button(ui, Some("…".into()), None, false).on_hover_text("See more");
+                let more = bar_button(ui, Some("…".into()), None, false)
+                    .on_hover_text(Localizations::of(ui.ctx()).see_more);
                 Popup::menu(&more)
                     .frame(flyout_frame(&theme))
                     .width(200.0)
@@ -346,7 +348,7 @@ impl TeachingTip {
                     });
                     ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                         close |= glyph_button(ui, 28.0, paint_close)
-                            .on_hover_text("Close")
+                            .on_hover_text(Localizations::of(ui.ctx()).close_button_label)
                             .clicked();
                     });
                 });

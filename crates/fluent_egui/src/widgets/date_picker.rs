@@ -1,6 +1,7 @@
 use egui::{Align, AsIdSalt, IdSalt, Response, Ui, Widget};
 
 use super::pickers::{PickerColumn, PickerPopupState, PopupAction, picker_button, picker_popup};
+use crate::Localizations;
 use crate::date::{Date, MONTH_NAMES, days_in_month};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -89,13 +90,14 @@ impl Widget for DatePicker<'_> {
             month = popup.indices[0].rem_euclid(12) as u8 + 1;
             year = start + popup.indices[2].clamp(0, i64::from(end - start)) as i32;
         }
+        let l10n = Localizations::of(ui.ctx());
         let column = |field: Field| match field {
             Field::Month => PickerColumn {
                 items: MONTH_NAMES.iter().map(|m| (*m).to_owned()).collect(),
                 width: 132.0,
                 looping: true,
                 align: Align::Min,
-                placeholder: "month",
+                placeholder: l10n.month,
             },
             Field::Day => PickerColumn {
                 items: (1..=days_in_month(year, month))
@@ -104,14 +106,14 @@ impl Widget for DatePicker<'_> {
                 width: 78.0,
                 looping: true,
                 align: Align::Center,
-                placeholder: "day",
+                placeholder: l10n.day,
             },
             Field::Year => PickerColumn {
                 items: (start..=end).map(|y| y.to_string()).collect(),
                 width: 78.0,
                 looping: false,
                 align: Align::Center,
-                placeholder: "year",
+                placeholder: l10n.year,
             },
         };
         let columns: Vec<PickerColumn> = self.fields.iter().map(|f| column(*f)).collect();
@@ -127,7 +129,7 @@ impl Widget for DatePicker<'_> {
         });
         let label = self
             .value
-            .map_or_else(|| "Pick a date".to_owned(), |d| d.to_string());
+            .map_or_else(|| l10n.pick_a_date.to_owned(), |d| d.to_string());
         let mut response = picker_button(ui, id, &columns, values, &label, popup.open);
 
         if response.clicked() && !popup.open {

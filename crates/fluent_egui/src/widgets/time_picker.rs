@@ -1,6 +1,7 @@
 use egui::{Align, AsIdSalt, IdSalt, Response, Ui, Widget};
 
 use super::pickers::{PickerColumn, PickerPopupState, PopupAction, picker_button, picker_popup};
+use crate::Localizations;
 use crate::date::Time;
 
 /// A button showing hour, minute and AM/PM that opens scrolling columns to
@@ -51,13 +52,14 @@ impl Widget for TimePicker<'_> {
         } else {
             (1..=12).map(|h| h.to_string()).collect()
         };
+        let l10n = Localizations::of(ui.ctx());
         let mut columns = vec![
             PickerColumn {
                 items: hours,
                 width: 80.0,
                 looping: true,
                 align: Align::Center,
-                placeholder: "hour",
+                placeholder: l10n.hour,
             },
             PickerColumn {
                 items: (0..60)
@@ -67,16 +69,16 @@ impl Widget for TimePicker<'_> {
                 width: 80.0,
                 looping: true,
                 align: Align::Center,
-                placeholder: "minute",
+                placeholder: l10n.minute,
             },
         ];
         if !self.use_24_hour {
             columns.push(PickerColumn {
-                items: vec!["AM".to_owned(), "PM".to_owned()],
+                items: vec![l10n.am.to_owned(), l10n.pm.to_owned()],
                 width: 80.0,
                 looping: false,
                 align: Align::Center,
-                placeholder: "AM",
+                placeholder: l10n.am,
             });
         }
 

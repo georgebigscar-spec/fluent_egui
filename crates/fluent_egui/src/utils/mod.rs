@@ -10,7 +10,7 @@ mod states;
 mod wheel;
 
 pub use animate::animate_color;
-pub use color::{lerp, with_alpha};
+pub use color::{hsv_to_rgb, lerp, rgb_to_hsv, with_alpha};
 pub use focus::paint_focus_border;
 pub use glyphs::{
     StatusGlyph, paint_check, paint_chevron_down, paint_chevron_down_small, paint_chevron_right,

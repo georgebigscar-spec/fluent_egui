@@ -5,6 +5,7 @@
 //! The output dir defaults to `crates/fluent_egui/src`. Generated files:
 //!   * `theme/resources.rs`, from `lib/src/styles/color_resources.dart`
 //!   * `icons.rs`, from `lib/src/icons.dart` and `lib/src/windows_icons.dart`
+//!   * `l10n/strings.rs`, from the `lib/l10n/intl_*.arb` translations
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -27,6 +28,11 @@ fn main() {
     let fluent = read(&source.join("lib/src/icons.dart"));
     let windows = read(&source.join("lib/src/windows_icons.dart"));
     write(&out.join("icons.rs"), &gen_icons(&fluent, &windows));
+
+    write(
+        &out.join("l10n/strings.rs"),
+        &gen_l10n(&source.join("lib/l10n")),
+    );
 }
 
 fn read(path: &Path) -> String {
@@ -183,4 +189,132 @@ fn snake_case(camel: &str) -> String {
         }
     }
     s
+}
+
+/// Reads every `intl_<locale>.arb`, keeping the plain string entries and
+/// dropping the colour names, which no widget shows yet.
+fn gen_l10n(dir: &Path) -> String {
+    let mut locales: Vec<(String, Vec<(String, String)>)> = fs::read_dir(dir)
+        .unwrap_or_else(|e| {
+            eprintln!("cannot read {}: {e}", dir.display());
+            process::exit(1);
+        })
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            let name = path.file_name()?.to_str()?;
+            let locale = name.strip_prefix("intl_")?.strip_suffix(".arb")?.to_owned();
+            Some((locale, parse_arb(&read(&path))))
+        })
+        .collect();
+    locales.sort_by(|a, b| (a.0 != "en", &a.0).cmp(&(b.0 != "en", &b.0)));
+    let english = locales.first().expect("no intl_en.arb").1.clone();
+    let keys: Vec<&String> = english
+        .iter()
+        .map(|(k, _)| k)
+        .filter(|k| !k.starts_with("color"))
+        .collect();
+
+    let mut s = String::from(HEADER);
+    s.push_str(
+        "// Source: fluent_ui lib/l10n/intl_*.arb\n\n\
+         /// UI strings for one locale, fluent_ui's `FluentLocalizations`.\n\
+         #[derive(Clone, Copy, Debug, PartialEq, Eq)]\n\
+         pub struct Localizations {\n    \
+         /// The locale tag, such as `en` or `zh_Hant`.\n    \
+         pub locale: &'static str,\n",
+    );
+    for (key, value) in english.iter().filter(|(k, _)| keys.contains(&k)) {
+        writeln!(
+            s,
+            "    /// {value:?} in English.\n    pub {}: &'static str,",
+            snake_case(key)
+        )
+        .unwrap();
+    }
+    s.push_str("}\n\n#[rustfmt::skip]\nimpl Localizations {\n");
+    for (locale, entries) in &locales {
+        let lookup = |key: &str| {
+            entries
+                .iter()
+                .chain(&english)
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.clone())
+                .unwrap()
+        };
+        writeln!(
+            s,
+            "    /// Strings for the `{locale}` locale.\n    pub const {}: Self = Self {{\n        locale: \"{locale}\",",
+            locale.to_uppercase()
+        )
+        .unwrap();
+        for key in &keys {
+            writeln!(s, "        {}: {:?},", snake_case(key), lookup(key)).unwrap();
+        }
+        s.push_str("    };\n");
+    }
+    s.push_str(
+        "}\n\n/// Every bundled locale, English first.\npub static ALL: &[Localizations] = &[\n",
+    );
+    for (locale, _) in &locales {
+        writeln!(s, "    Localizations::{},", locale.to_uppercase()).unwrap();
+    }
+    s.push_str("];\n");
+    s
+}
+
+/// Pulls the top-level `"key": "string"` pairs out of an ARB file, skipping
+/// `@` metadata. Tolerates the trailing commas some translations have.
+fn parse_arb(json: &str) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut chars = json.chars().peekable();
+    let mut depth = 0;
+    let mut pending_key: Option<String> = None;
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            '"' => {
+                let mut text = String::new();
+                while let Some(c) = chars.next() {
+                    match c {
+                        '"' => break,
+                        '\\' => match chars.next() {
+                            Some('n') => text.push('\n'),
+                            Some('t') => text.push('\t'),
+                            Some('u') => {
+                                let hex: String = chars.by_ref().take(4).collect();
+                                text.extend(
+                                    u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32),
+                                );
+                            }
+                            Some(other) => text.push(other),
+                            None => {}
+                        },
+                        _ => text.push(c),
+                    }
+                }
+                if depth != 1 {
+                    continue;
+                }
+                match pending_key.take() {
+                    Some(key) if !key.starts_with('@') => out.push((key, text)),
+                    Some(_) => {}
+                    None => {
+                        while chars.peek().is_some_and(|c| c.is_whitespace()) {
+                            chars.next();
+                        }
+                        if chars.peek() == Some(&':') {
+                            pending_key = Some(text);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        if depth != 1 {
+            // A nested metadata object swallowed the key.
+            pending_key = None;
+        }
+    }
+    out
 }

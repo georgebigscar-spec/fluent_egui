@@ -14,7 +14,9 @@ and the surfaces and flyouts: `Card`, `Expander`, `InfoBar`, tooltips,
 `TeachingTip`, and navigation: `NavigationView` (open, compact, minimal and
 top panes), `ScaffoldPage`, `TabView`, `BreadcrumbBar` and `TreeView`, and the
 pickers: `CalendarView`, `CalendarDatePicker`, `DatePicker`, `TimePicker` and
-`ColorPicker`. Dates and times use the crate's own small `Date` and `Time`
+`ColorPicker`, plus `Rating`, `AutoSuggestBox`, `ListTile`, menu submenus,
+`Acrylic`/`Mica`, page transitions and localized built-in strings in 41
+languages. Dates and times use the crate's own small `Date` and `Time`
 types, so no date library is pulled in.
 
 ```rust
@@ -39,7 +41,7 @@ Fluent ones.
 | --- | --- |
 | `crates/fluent_egui` | The library. `theme/` mirrors fluent_ui's `lib/src/styles`, `widgets/` mirrors `lib/src/controls`. |
 | `examples/gallery` | Demo app, `cargo run -p gallery`. |
-| `tools/codegen` | Regenerates `theme/resources.rs` and `icons.rs` from a fluent_ui checkout. |
+| `tools/codegen` | Regenerates `theme/resources.rs`, `icons.rs` and `l10n/strings.rs` from a fluent_ui checkout. |
 
 Regenerating:
 
@@ -62,16 +64,29 @@ and `SEGOE_ICONS_TTF` environment variables.
    ToggleButton, Checkbox, RadioButton, ToggleSwitch, Slider, ProgressBar/Ring,
    InfoBadge, InfoLabel.
 3. ✅ Input: TextBox, PasswordBox, NumberBox, DropDownButton, SplitButton, ComboBox,
-   Rating, AutoSuggestBox. (Rating and AutoSuggestBox are still to do.)
+   Rating, AutoSuggestBox.
 4. ✅ Surfaces and flyouts: Card, Expander, ListTile, InfoBar, Tooltip, Flyout,
-   MenuFlyout, ContentDialog, CommandBar, MenuBar, TeachingTip. (ListTile and
-   submenus are still to do.)
+   MenuFlyout (with submenus), ContentDialog, CommandBar, MenuBar, TeachingTip.
 5. ✅ Navigation: ScaffoldPage, NavigationView, TabView, BreadcrumbBar, TreeView.
    (Nested pane items, AutoSuggestBox in the pane and tab keyboard shortcuts
    are still to do.)
 6. ✅ Pickers: DatePicker, TimePicker, CalendarView, ColorPicker. (Range and
    multiple selection in CalendarView and localized names are still to do.)
-7. Extras: Acrylic/Mica, page transitions, DynamicOverflow, localization.
+7. ✅ Extras: Acrylic/Mica, page transitions (Entrance, DrillIn,
+   HorizontalSlide, Suppress, used by NavigationView), localization
+   (`Localizations`, generated from fluent_ui's ARB files). egui has no
+   backdrop blur, so Acrylic shows the backdrop unblurred under its luminosity
+   layer, and Mica is the solid base colour. (DynamicOverflow and localized
+   month and weekday names are still to do.)
+
+## Localization
+
+```rust
+fluent_egui::Localizations::for_locale("ru-RU").install(ctx);
+```
+
+Widgets then use the Russian strings for tooltips, placeholders and labels.
+Missing translations fall back to English.
 
 ## License
 

@@ -1,5 +1,6 @@
 //! Fluent widgets. The layout mirrors fluent_ui's `lib/src/controls`.
 
+mod acrylic;
 mod auto_suggest_box;
 mod bars;
 mod breadcrumb_bar;
@@ -21,6 +22,7 @@ mod list_tile;
 mod menu;
 mod navigation_view;
 mod number_box;
+mod page_transition;
 mod pickers;
 mod progress;
 mod radio_button;
@@ -34,6 +36,7 @@ mod toggle_switch;
 mod tooltip;
 mod tree_view;
 
+pub use acrylic::{Acrylic, Mica};
 pub use auto_suggest_box::{AutoSuggestBox, AutoSuggestBoxResponse};
 pub use bars::{CommandBar, CommandBarUi, MenuBar, MenuBarUi, TeachingTip, TeachingTipResponse};
 pub use breadcrumb_bar::BreadcrumbBar;
@@ -58,6 +61,7 @@ pub use menu::{
 };
 pub use navigation_view::{NavigationView, NavigationViewResponse, PaneDisplayMode, PaneItem};
 pub use number_box::{NumberBox, SpinButtonPlacement};
+pub use page_transition::{PageTransition, PageTransitionKind};
 pub use progress::{ProgressBar, ProgressRing};
 pub use radio_button::{RadioButton, radio_value};
 pub use rating::Rating;

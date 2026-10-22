@@ -6,15 +6,15 @@
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
-    AccentColor, AutoSuggestBox, BreadcrumbBar, Brightness, Button, CalendarDatePicker,
+    AccentColor, Acrylic, AutoSuggestBox, BreadcrumbBar, Brightness, Button, CalendarDatePicker,
     CalendarView, Card, Checkbox, ColorPicker, ColorSpectrumShape, ComboBox, CommandBar,
     ContentDialog, DatePicker, DialogResult, Divider, DropDownButton, Expander, FluentTheme,
     FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel, ListTile,
-    ListTileSelectionMode, MenuBar, MenuItem, NavigationView, NumberBox, PaneDisplayMode, PaneItem,
-    PasswordBox, ProgressBar, ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton,
-    Tab, TabView, TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem,
-    TreeViewSelectionMode, colors, combo_value, context_menu, fonts, menu_separator, radio_value,
-    sub_menu,
+    ListTileSelectionMode, Localizations, MenuBar, MenuItem, Mica, NavigationView, NumberBox,
+    PageTransition, PageTransitionKind, PaneDisplayMode, PaneItem, PasswordBox, ProgressBar,
+    ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton, Tab, TabView, TeachingTip,
+    TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem, TreeViewSelectionMode, colors,
+    combo_value, context_menu, fonts, l10n, menu_separator, radio_value, sub_menu,
 };
 
 fn main() -> eframe::Result {
@@ -100,6 +100,8 @@ struct Gallery {
     icon_fonts: Vec<&'static str>,
     icon_filter: String,
     nav_mode: PaneDisplayMode,
+    transition: usize,
+    locale: usize,
     demo: Demo,
 }
 
@@ -233,6 +235,13 @@ impl Gallery {
                         .map(|(m, _)| *m)
                 })
                 .unwrap_or_default(),
+            transition: 0,
+            // GALLERY_LOCALE picks the language, such as `ru`.
+            locale: std::env::var("GALLERY_LOCALE")
+                .ok()
+                .map(|tag| Localizations::for_locale(&tag).locale)
+                .and_then(|tag| l10n::ALL.iter().position(|l| l.locale == tag))
+                .unwrap_or(0),
             demo: Demo::default(),
         };
         gallery.install_theme(ctx);
@@ -245,6 +254,7 @@ impl Gallery {
 
     fn install_theme(&self, ctx: &egui::Context) {
         FluentTheme::with_accent(self.brightness, self.accent()).install(ctx);
+        l10n::ALL[self.locale].install(ctx);
     }
 }
 
@@ -258,11 +268,14 @@ impl eframe::App for Gallery {
         });
         let current = self.page;
         let mut page = current;
+        let mut nav = NavigationView::new("gallery_nav");
+        if let Some(transition) = TRANSITIONS[self.transition].0 {
+            nav = nav.transition(transition);
+        }
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(theme.mica_background_color))
             .show(ui, |ui| {
-                NavigationView::new("gallery_nav")
-                    .title("fluent_egui")
+                nav.title("fluent_egui")
                     .display_mode(self.nav_mode)
                     .items(items)
                     .footer_items([PaneItem::new(Page::Settings, "Settings").icon("⚙")])
@@ -419,8 +432,67 @@ fn settings_page(ui: &mut egui::Ui, theme: &FluentTheme, gallery: &mut Gallery) 
             combo_value(ui, &mut gallery.nav_mode, mode, name);
         }
     });
+
+    section(ui, theme, "Page transition");
+    ComboBox::new("transition", TRANSITIONS[gallery.transition].1).show_ui(ui, |ui| {
+        for (i, (_, name)) in TRANSITIONS.iter().enumerate() {
+            combo_value(ui, &mut gallery.transition, i, *name);
+        }
+    });
+
+    section(ui, theme, "Language of built-in strings");
+    let before = gallery.locale;
+    ComboBox::new("locale", l10n::ALL[gallery.locale].locale)
+        .width(120.0)
+        .show_ui(ui, |ui| {
+            for (i, l) in l10n::ALL.iter().enumerate() {
+                combo_value(ui, &mut gallery.locale, i, l.locale);
+            }
+        });
+    changed |= gallery.locale != before;
+    let l10n = &l10n::ALL[gallery.locale];
+    ui.label(theme.typography.caption.rich(format!(
+        "{} · {} · {} · {}",
+        l10n.close_button_label, l10n.pick_a_date, l10n.no_results_found_label, l10n.new_tab_label
+    )));
     changed
 }
+
+const TRANSITIONS: [(Option<PageTransition>, &str); 5] = [
+    (None, "Default (entrance, slide in top mode)"),
+    (
+        Some(PageTransition {
+            kind: PageTransitionKind::Entrance {
+                vertical: true,
+                reverse: false,
+                start_from: 0.25,
+            },
+            duration: None,
+        }),
+        "Entrance",
+    ),
+    (
+        Some(PageTransition {
+            kind: PageTransitionKind::DrillIn,
+            duration: None,
+        }),
+        "Drill in",
+    ),
+    (
+        Some(PageTransition {
+            kind: PageTransitionKind::HorizontalSlide { from_left: false },
+            duration: None,
+        }),
+        "Horizontal slide",
+    ),
+    (
+        Some(PageTransition {
+            kind: PageTransitionKind::Suppress,
+            duration: None,
+        }),
+        "Suppress",
+    ),
+];
 
 fn navigation_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
     section(ui, theme, "NavigationView");
@@ -950,6 +1022,77 @@ fn menus_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
     });
 }
 
+/// Acrylic cards over a colourful backdrop, beside a Mica panel.
+fn materials(ui: &mut egui::Ui, theme: &FluentTheme, width: f32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 170.0), egui::Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(
+        rect,
+        8.0,
+        theme.resources.card_background_fill_color_default,
+    );
+    for (i, color) in [
+        colors::ORANGE.normal,
+        colors::BLUE.normal,
+        colors::MAGENTA.normal,
+        colors::GREEN.normal,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let x = rect.left() + 60.0 + i as f32 * (width - 120.0) / 3.0;
+        let y = rect.center().y + if i % 2 == 0 { -30.0 } else { 30.0 };
+        painter.circle_filled(egui::pos2(x, y), 46.0, color);
+    }
+    painter.text(
+        rect.left_bottom() + egui::vec2(12.0, -10.0),
+        egui::Align2::LEFT_BOTTOM,
+        "backdrop",
+        theme.typography.caption.font_id(),
+        theme.resources.text_fill_color_secondary,
+    );
+
+    let card = |ui: &mut egui::Ui, x: f32, acrylic: Acrylic, title: &str, body: &str| {
+        let area = egui::Rect::from_min_size(
+            egui::pos2(rect.left() + x, rect.top() + 24.0),
+            egui::vec2(width / 2.0 - 36.0, 0.0),
+        );
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area));
+        acrylic.show(&mut child, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(theme.typography.body_strong.rich(title));
+            ui.label(body);
+        });
+    };
+    card(
+        ui,
+        24.0,
+        Acrylic::new().corner_radius(8).elevation(8.0),
+        "Acrylic",
+        "Tint and luminosity layers with grain.",
+    );
+    card(
+        ui,
+        width / 2.0 + 12.0,
+        Acrylic::new()
+            .corner_radius(8)
+            .elevation(8.0)
+            .disabled(true),
+        "Acrylic, disabled",
+        "The opaque fallback colour.",
+    );
+
+    ui.add_space(8.0);
+    Mica::new()
+        .corner_radius(8)
+        .inner_margin(12)
+        .show(ui, |ui| {
+            ui.set_width(width - 24.0);
+            ui.label(theme.typography.body_strong.rich("Mica"));
+            ui.label("The window backdrop colour; this whole gallery sits on it.");
+        });
+}
+
 fn surfaces_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
     let width = ui.available_width().min(560.0);
     ui.allocate_ui(egui::vec2(width, 0.0), |ui| {
@@ -959,6 +1102,9 @@ fn surfaces_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
             ui.label(theme.typography.body_strong.rich("Card title"));
             ui.label("Cards group related content on a surface with a subtle border.");
         });
+
+        section(ui, theme, "Acrylic and Mica");
+        materials(ui, theme, width);
 
         section(ui, theme, "Expander");
         Expander::new("expander", "Advanced settings").show(ui, |ui| {

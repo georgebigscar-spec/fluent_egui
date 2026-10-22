@@ -4,6 +4,7 @@ use egui::{
 
 use super::{MenuItem, TextBox, flyout_frame};
 use crate::FluentTheme;
+use crate::Localizations;
 
 /// What [`AutoSuggestBox::show`] returns.
 pub struct AutoSuggestBoxResponse {
@@ -138,7 +139,10 @@ impl<'a, S: AsRef<str>> AutoSuggestBox<'a, S> {
             .show(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
                 if matches.is_empty() {
-                    ui.add_enabled(false, MenuItem::new("No results found"));
+                    ui.add_enabled(
+                        false,
+                        MenuItem::new(Localizations::of(ui.ctx()).no_results_found_label),
+                    );
                 }
                 for (row, &i) in matches.iter().enumerate().take(12) {
                     let item = MenuItem::new(self.items[i].as_ref())

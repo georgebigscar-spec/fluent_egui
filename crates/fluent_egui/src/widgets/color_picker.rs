@@ -8,7 +8,9 @@ use egui::{
 
 use super::{ComboBox, NumberBox, TextBox, combo_value};
 use crate::FluentTheme;
+use crate::Localizations;
 use crate::utils::paint_focus_border;
+use crate::utils::{hsv_to_rgb, rgb_to_hsv};
 
 /// fluent_ui's `_ColorPickerSizes` and `_ColorPickerSpacing`.
 const SPECTRUM: f32 = 256.0;
@@ -118,6 +120,7 @@ impl Widget for ColorPicker<'_> {
         }
         let before = state.hsva;
 
+        let l10n = Localizations::of(ui.ctx());
         let response = ui
             .vertical(|ui| {
                 ui.spacing_mut().item_spacing = vec2(SMALL, LARGE);
@@ -130,7 +133,7 @@ impl Widget for ColorPicker<'_> {
                 gradient_slider(
                     ui,
                     id.with("value"),
-                    "Value",
+                    l10n.value_label,
                     &mut state.hsva[2],
                     [Color32::BLACK, full],
                     false,
@@ -142,7 +145,7 @@ impl Widget for ColorPicker<'_> {
                     gradient_slider(
                         ui,
                         id.with("alpha"),
-                        "Alpha",
+                        l10n.opacity_label,
                         &mut state.hsva[3],
                         [clear, opaque],
                         true,
@@ -207,6 +210,7 @@ impl ColorPicker<'_> {
             }
         });
 
+        let l10n = Localizations::of(ui.ctx());
         let channel = |ui: &mut Ui, name: &str, value: &mut f64, max: f64, salt: &str| {
             ui.horizontal(|ui| {
                 let changed = ui
@@ -228,8 +232,9 @@ impl ColorPicker<'_> {
                 let [r, g, b, _] = color.to_srgba_unmultiplied();
                 let mut rgb = [r, g, b].map(f64::from);
                 let mut changed = false;
-                for (i, name) in ["Red", "Green", "Blue"].iter().enumerate() {
-                    changed |= channel(ui, name, &mut rgb[i], 255.0, name);
+                let names = [l10n.red_label, l10n.green_label, l10n.blue_label];
+                for (i, (name, salt)) in names.iter().zip(["Red", "Green", "Blue"]).enumerate() {
+                    changed |= channel(ui, name, &mut rgb[i], 255.0, salt);
                 }
                 if changed {
                     let [h, s, v] = rgb_to_hsv(rgb.map(|c| c as f32 / 255.0));
@@ -248,11 +253,13 @@ impl ColorPicker<'_> {
                     f64::from(state.hsva[2] * 100.0),
                 ];
                 let mut changed = false;
-                for (i, (name, max)) in [("Hue", 359.0), ("Saturation", 100.0), ("Value", 100.0)]
-                    .iter()
-                    .enumerate()
-                {
-                    changed |= channel(ui, name, &mut hsv[i], *max, name);
+                let channels = [
+                    (l10n.hue_label, "Hue", 359.0),
+                    (l10n.saturation_label, "Saturation", 100.0),
+                    (l10n.value_label, "Value", 100.0),
+                ];
+                for (i, (name, salt, max)) in channels.iter().enumerate() {
+                    changed |= channel(ui, name, &mut hsv[i], *max, salt);
                 }
                 if changed {
                     state.hsva = [
@@ -266,7 +273,7 @@ impl ColorPicker<'_> {
         }
         if self.alpha {
             let mut alpha = f64::from((state.hsva[3] * 100.0).round());
-            if channel(ui, "Opacity", &mut alpha, 100.0, "Opacity") {
+            if channel(ui, l10n.opacity_label, &mut alpha, 100.0, "Opacity") {
                 state.hsva[3] = alpha as f32 / 100.0;
             }
         }
@@ -514,40 +521,6 @@ fn paint_checkerboard(ui: &Ui, rect: Rect, radius: f32) {
             painter.rect_filled(cell, 0.0, Color32::from_gray(204));
         }
     }
-}
-
-/// sRGB components (0 to 1) to hue, saturation and value (0 to 1).
-fn rgb_to_hsv([r, g, b]: [f32; 3]) -> [f32; 3] {
-    let max = r.max(g).max(b);
-    let min = r.min(g).min(b);
-    let d = max - min;
-    let h = if d == 0.0 {
-        0.0
-    } else if max == r {
-        ((g - b) / d).rem_euclid(6.0)
-    } else if max == g {
-        (b - r) / d + 2.0
-    } else {
-        (r - g) / d + 4.0
-    } / 6.0;
-    let s = if max == 0.0 { 0.0 } else { d / max };
-    [h, s, max]
-}
-
-fn hsv_to_rgb([h, s, v]: [f32; 3]) -> [f32; 3] {
-    let h = h.rem_euclid(1.0) * 6.0;
-    let c = v * s;
-    let x = c * (1.0 - (h % 2.0 - 1.0).abs());
-    let (r, g, b) = match h as u32 {
-        0 => (c, x, 0.0),
-        1 => (x, c, 0.0),
-        2 => (0.0, c, x),
-        3 => (0.0, x, c),
-        4 => (x, 0.0, c),
-        _ => (c, 0.0, x),
-    };
-    let m = v - c;
-    [r + m, g + m, b + m]
 }
 
 fn hsva_to_color([h, s, v, a]: [f32; 4]) -> Color32 {
