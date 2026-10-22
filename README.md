@@ -7,7 +7,8 @@ Status: early. Done so far: the theme (WinUI color resources, accent colors,
 Windows 11 type ramp), icon codepoints, and the basic controls: `Button`
 (standard, filled, outlined, hyperlink, icon, toggle), `Checkbox`,
 `RadioButton`, `ToggleSwitch`, `Slider`, `ProgressBar`, `ProgressRing`,
-`InfoBadge`, `InfoLabel` and `Divider`.
+`InfoBadge`, `InfoLabel` and `Divider`, and the input controls: `TextBox`,
+`PasswordBox`, `NumberBox`, `DropDownButton`, `SplitButton` and `ComboBox`.
 
 ```rust
 use fluent_egui::{Brightness, FluentTheme};
@@ -53,8 +54,8 @@ and `SEGOE_ICONS_TTF` environment variables.
 2. ✅ Basic controls: Button, FilledButton, OutlinedButton, IconButton, HyperlinkButton,
    ToggleButton, Checkbox, RadioButton, ToggleSwitch, Slider, ProgressBar/Ring,
    InfoBadge, InfoLabel.
-3. Input: TextBox, PasswordBox, NumberBox, DropDownButton, SplitButton, ComboBox,
-   Rating, AutoSuggestBox.
+3. ✅ Input: TextBox, PasswordBox, NumberBox, DropDownButton, SplitButton, ComboBox,
+   Rating, AutoSuggestBox. (Rating and AutoSuggestBox are still to do.)
 4. Surfaces and flyouts: Card, Expander, ListTile, InfoBar, Tooltip, Flyout,
    MenuFlyout, ContentDialog, CommandBar, MenuBar, TeachingTip.
 5. Navigation: ScaffoldPage, NavigationView, TabView, BreadcrumbBar, TreeView.

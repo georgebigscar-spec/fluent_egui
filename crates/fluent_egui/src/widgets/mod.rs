@@ -6,9 +6,12 @@ mod divider;
 mod icon;
 mod info_badge;
 mod info_label;
+mod menu;
+mod number_box;
 mod progress;
 mod radio_button;
 mod slider;
+mod text_box;
 mod toggle_switch;
 
 pub use button::{Button, ButtonKind, ButtonStyle, IconButtonMode};
@@ -17,9 +20,14 @@ pub use divider::Divider;
 pub use icon::{icon, windows_icon};
 pub use info_badge::{InfoBadge, Severity};
 pub use info_label::InfoLabel;
+pub use menu::{
+    ComboBox, DropDownButton, MenuItem, SplitButton, SplitButtonResponse, combo_value, flyout_frame,
+};
+pub use number_box::{NumberBox, SpinButtonPlacement};
 pub use progress::{ProgressBar, ProgressRing};
 pub use radio_button::{RadioButton, radio_value};
 pub use slider::Slider;
+pub use text_box::{PasswordBox, PasswordRevealMode, TextBox};
 pub use toggle_switch::ToggleSwitch;
 
 use std::sync::Arc;

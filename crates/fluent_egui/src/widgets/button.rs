@@ -1,6 +1,6 @@
 use egui::{
-    Color32, Margin, Rect, Response, Role, Sense, TextWrapMode, Ui, Vec2, Widget, WidgetInfo,
-    WidgetText,
+    Color32, CornerRadius, Margin, Rect, Response, Role, Sense, TextWrapMode, Ui, Vec2, Widget,
+    WidgetInfo, WidgetText,
 };
 
 use crate::utils::{
@@ -55,7 +55,7 @@ pub struct ButtonStyle {
     pub foreground: States<Color32>,
     pub border: States<ButtonBorder>,
     pub padding: Margin,
-    pub corner_radius: f32,
+    pub corner_radius: CornerRadius,
     /// Font size of the label. `None` uses the body style.
     pub text_size: Option<f32>,
 }
@@ -92,7 +92,7 @@ impl ButtonStyle {
             ),
             border: States::new(raised, raised, flat, flat),
             padding: DEFAULT_BUTTON_PADDING,
-            corner_radius: 4.0,
+            corner_radius: CornerRadius::same(4),
             text_size: None,
         }
     }
@@ -126,7 +126,7 @@ impl ButtonStyle {
             foreground: States::all(inactive),
             border: States::all(ButtonBorder::Solid(inactive)),
             padding: DEFAULT_BUTTON_PADDING,
-            corner_radius: 2.0,
+            corner_radius: CornerRadius::same(2),
             text_size: Some(13.0),
         }
     }
@@ -150,7 +150,7 @@ impl ButtonStyle {
             ),
             border: States::all(ButtonBorder::None),
             padding: DEFAULT_BUTTON_PADDING,
-            corner_radius: 4.0,
+            corner_radius: CornerRadius::same(4),
             text_size: None,
         }
     }
@@ -176,7 +176,7 @@ impl ButtonStyle {
                 IconButtonMode::Large => Margin::same(8),
                 _ => DEFAULT_BUTTON_PADDING,
             },
-            corner_radius: 4.0,
+            corner_radius: CornerRadius::same(4),
             text_size: Some(if mode == IconButtonMode::Tiny {
                 11.0
             } else {
@@ -373,7 +373,7 @@ impl Widget for Button<'_> {
     }
 }
 
-fn paint_border(painter: &egui::Painter, rect: Rect, radius: f32, border: ButtonBorder) {
+fn paint_border(painter: &egui::Painter, rect: Rect, radius: CornerRadius, border: ButtonBorder) {
     match border {
         ButtonBorder::None => {}
         ButtonBorder::Solid(color) => paint_elevation_border(painter, rect, radius, color, color),

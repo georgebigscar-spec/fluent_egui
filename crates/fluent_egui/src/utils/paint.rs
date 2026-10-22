@@ -1,7 +1,7 @@
 use std::f32::consts::TAU;
 
 use egui::epaint::PathShape;
-use egui::{Color32, Painter, Pos2, Rect, Stroke, StrokeKind};
+use egui::{Color32, CornerRadius, Painter, Pos2, Rect, Stroke, StrokeKind};
 
 /// The border of a Fluent control at rest: a 1px stroke in `top`, with the
 /// bottom edge in `bottom` so the control looks slightly raised. Approximates
@@ -9,10 +9,11 @@ use egui::{Color32, Painter, Pos2, Rect, Stroke, StrokeKind};
 pub fn paint_elevation_border(
     painter: &Painter,
     rect: Rect,
-    corner_radius: f32,
+    corner_radius: impl Into<CornerRadius>,
     top: Color32,
     bottom: Color32,
 ) {
+    let corner_radius = corner_radius.into();
     painter.rect_stroke(
         rect,
         corner_radius,
@@ -20,7 +21,8 @@ pub fn paint_elevation_border(
         StrokeKind::Inside,
     );
     if bottom != top {
-        let x = (rect.left() + corner_radius)..=(rect.right() - corner_radius);
+        let x = (rect.left() + f32::from(corner_radius.sw))
+            ..=(rect.right() - f32::from(corner_radius.se));
         painter.hline(x, rect.bottom() - 0.5, Stroke::new(1.0, bottom));
     }
 }

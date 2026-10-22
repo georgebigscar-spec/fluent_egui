@@ -6,8 +6,9 @@
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
-    AccentColor, Brightness, Button, Checkbox, Divider, FluentTheme, IconButtonMode, InfoBadge,
-    InfoLabel, ProgressBar, ProgressRing, Severity, Slider, ToggleSwitch, colors, fonts,
+    AccentColor, Brightness, Button, Checkbox, ComboBox, Divider, DropDownButton, FluentTheme,
+    IconButtonMode, InfoBadge, InfoLabel, MenuItem, NumberBox, PasswordBox, ProgressBar,
+    ProgressRing, Severity, Slider, SplitButton, TextBox, ToggleSwitch, colors, combo_value, fonts,
     radio_value,
 };
 
@@ -29,6 +30,8 @@ fn main() -> eframe::Result {
 enum Page {
     Buttons,
     Inputs,
+    TextInput,
+    Menus,
     Progress,
     Status,
     Colors,
@@ -38,9 +41,11 @@ enum Page {
 }
 
 impl Page {
-    const ALL: [(Page, &'static str); 8] = [
+    const ALL: [(Page, &'static str); 10] = [
         (Page::Buttons, "Buttons"),
         (Page::Inputs, "Inputs"),
+        (Page::TextInput, "Text fields"),
+        (Page::Menus, "Drop-downs"),
         (Page::Progress, "Progress"),
         (Page::Status, "InfoBadge & InfoLabel"),
         (Page::Colors, "Colors"),
@@ -72,6 +77,13 @@ struct Demo {
     stepped: f32,
     progress: f32,
     name: String,
+    notes: String,
+    password: String,
+    quantity: f64,
+    price: f64,
+    color: usize,
+    font: Option<usize>,
+    last_action: String,
 }
 
 impl Default for Demo {
@@ -88,6 +100,13 @@ impl Default for Demo {
             stepped: 3.0,
             progress: 65.0,
             name: String::new(),
+            notes: String::new(),
+            password: String::new(),
+            quantity: 3.0,
+            price: 9.99,
+            color: 0,
+            font: None,
+            last_action: "nothing yet".to_owned(),
         }
     }
 }
@@ -199,6 +218,8 @@ impl eframe::App for Gallery {
             egui::ScrollArea::vertical().show(ui, |ui| match self.page {
                 Page::Buttons => buttons_page(ui, &theme, &mut self.demo, &self.icon_fonts),
                 Page::Inputs => inputs_page(ui, &theme, &mut self.demo),
+                Page::TextInput => text_page(ui, &theme, &mut self.demo),
+                Page::Menus => menus_page(ui, &theme, &mut self.demo),
                 Page::Progress => progress_page(ui, &theme, &mut self.demo),
                 Page::Status => status_page(ui, &theme, &mut self.demo),
                 Page::Colors => colors_page(ui, &theme),
@@ -521,4 +542,109 @@ fn status_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
         .show(ui, |ui| {
             ui.add(ToggleSwitch::without_text(&mut demo.switch));
         });
+}
+
+fn text_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "Text fields");
+    disabled_switch(ui, demo);
+    let enabled = !demo.disabled;
+
+    section(ui, theme, "TextBox");
+    ui.add_enabled(enabled, TextBox::new(&mut demo.name).placeholder("Name"));
+    ui.add_space(8.0);
+    ui.add_enabled(
+        enabled,
+        TextBox::multiline(&mut demo.notes, 3).placeholder("Notes"),
+    );
+
+    section(ui, theme, "PasswordBox");
+    ui.add_enabled(
+        enabled,
+        PasswordBox::new(&mut demo.password).placeholder("Password"),
+    );
+    ui.label(
+        theme
+            .typography
+            .caption
+            .rich("Hold the eye button to peek."),
+    );
+
+    section(ui, theme, "NumberBox");
+    ui.horizontal(|ui| {
+        ui.add_enabled(
+            enabled,
+            NumberBox::new(&mut demo.quantity)
+                .range(0.0..=99.0)
+                .precision(0)
+                .width(140.0),
+        );
+        ui.label(format!("quantity = {}", demo.quantity));
+    });
+    ui.horizontal(|ui| {
+        ui.add_enabled(
+            enabled,
+            NumberBox::new(&mut demo.price)
+                .range(0.0..=1000.0)
+                .small_change(0.5)
+                .precision(2)
+                .width(140.0),
+        );
+        ui.label(format!("price = {:.2}", demo.price));
+    });
+}
+
+fn menus_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "Drop-downs");
+    disabled_switch(ui, demo);
+    let enabled = !demo.disabled;
+
+    ui.add_enabled_ui(enabled, |ui| {
+        section(ui, theme, "DropDownButton");
+        DropDownButton::new("Email").show(ui, |ui| {
+            for action in ["Send", "Reply", "Reply all"] {
+                if ui.add(MenuItem::new(action)).clicked() {
+                    demo.last_action = action.to_owned();
+                }
+            }
+        });
+
+        section(ui, theme, "SplitButton");
+        let split = SplitButton::new("Choose color").show(ui, |ui| {
+            for name in ["Red", "Green", "Blue"] {
+                if ui.add(MenuItem::new(name)).clicked() {
+                    demo.last_action = format!("color {name}");
+                }
+            }
+        });
+        if split.main.clicked() {
+            demo.last_action = "split button main action".to_owned();
+        }
+        ui.label(
+            theme
+                .typography
+                .caption
+                .rich(format!("Last action: {}", demo.last_action)),
+        );
+
+        section(ui, theme, "ComboBox");
+        let colors = ["Blue", "Green", "Red", "Yellow"];
+        ComboBox::new("color", colors[demo.color])
+            .width(200.0)
+            .show_ui(ui, |ui| {
+                for (i, name) in colors.iter().enumerate() {
+                    combo_value(ui, &mut demo.color, i, *name);
+                }
+            });
+        ui.add_space(8.0);
+        let fonts = ["Segoe UI", "Arial", "Consolas"];
+        let combo = match demo.font {
+            Some(i) => ComboBox::new("font", fonts[i]),
+            None => ComboBox::placeholder("font", "Pick a font"),
+        };
+        combo.width(200.0).show_ui(ui, |ui| {
+            for (i, name) in fonts.iter().enumerate() {
+                combo_value(ui, &mut demo.font, Some(i), *name);
+            }
+        });
+    });
 }
