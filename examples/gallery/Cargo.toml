@@ -1,0 +1,10 @@
+[package]
+name = "gallery"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+fluent_egui = { path = "../../crates/fluent_egui" }
+eframe.workspace = true

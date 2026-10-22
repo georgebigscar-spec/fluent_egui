@@ -1,0 +1,13 @@
+[workspace]
+resolver = "3"
+members = ["crates/fluent_egui", "examples/gallery", "tools/codegen"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "BSD-3-Clause"
+repository = "https://github.com/georgebigscar-spec/fluent_egui"
+
+[workspace.dependencies]
+egui = "0.37"
+eframe = "0.37"
