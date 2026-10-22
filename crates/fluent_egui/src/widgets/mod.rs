@@ -1,5 +1,6 @@
 //! Fluent widgets. The layout mirrors fluent_ui's `lib/src/controls`.
 
+mod auto_suggest_box;
 mod bars;
 mod breadcrumb_bar;
 mod button;
@@ -16,12 +17,14 @@ mod icon;
 mod info_badge;
 mod info_bar;
 mod info_label;
+mod list_tile;
 mod menu;
 mod navigation_view;
 mod number_box;
 mod pickers;
 mod progress;
 mod radio_button;
+mod rating;
 mod scaffold_page;
 mod slider;
 mod tab_view;
@@ -31,6 +34,7 @@ mod toggle_switch;
 mod tooltip;
 mod tree_view;
 
+pub use auto_suggest_box::{AutoSuggestBox, AutoSuggestBoxResponse};
 pub use bars::{CommandBar, CommandBarUi, MenuBar, MenuBarUi, TeachingTip, TeachingTipResponse};
 pub use breadcrumb_bar::BreadcrumbBar;
 pub use button::{Button, ButtonKind, ButtonStyle, IconButtonMode};
@@ -47,14 +51,16 @@ pub use icon::{icon, windows_icon};
 pub use info_badge::{InfoBadge, Severity};
 pub use info_bar::{InfoBar, InfoBarResponse};
 pub use info_label::InfoLabel;
+pub use list_tile::{ListTile, ListTileSelectionMode};
 pub use menu::{
     ComboBox, DropDownButton, MenuItem, SplitButton, SplitButtonResponse, combo_value,
-    context_menu, flyout_frame, menu_separator,
+    context_menu, flyout_frame, menu_separator, sub_menu,
 };
 pub use navigation_view::{NavigationView, NavigationViewResponse, PaneDisplayMode, PaneItem};
 pub use number_box::{NumberBox, SpinButtonPlacement};
 pub use progress::{ProgressBar, ProgressRing};
 pub use radio_button::{RadioButton, radio_value};
+pub use rating::Rating;
 pub use scaffold_page::ScaffoldPage;
 pub use slider::Slider;
 pub use tab_view::{CloseButtonVisibility, Tab, TabView, TabViewResponse, TabWidthBehavior};

@@ -40,6 +40,8 @@ pub struct MenuItem {
     icon: Option<WidgetText>,
     shortcut: Option<WidgetText>,
     selected: bool,
+    /// Opens a submenu: shows a chevron and stays highlighted while open.
+    submenu: Option<bool>,
 }
 
 impl MenuItem {
@@ -49,6 +51,7 @@ impl MenuItem {
             icon: None,
             shortcut: None,
             selected: false,
+            submenu: None,
         }
     }
 
@@ -95,7 +98,8 @@ impl Widget for MenuItem {
             bottom: 6,
         };
         let icon_width = if icon.is_some() { 28.0 } else { 0.0 };
-        let shortcut_width = shortcut.as_ref().map_or(0.0, |g| g.size().x + 24.0);
+        let shortcut_width = shortcut.as_ref().map_or(0.0, |g| g.size().x + 24.0)
+            + if self.submenu.is_some() { 24.0 } else { 0.0 };
         let content_width = icon_width + galley.size().x + shortcut_width + padding.sum().x;
         let width = ui.available_width().max(content_width);
         let size = Vec2::new(width, (galley.size().y + padding.sum().y).max(32.0));
@@ -105,7 +109,8 @@ impl Widget for MenuItem {
         });
 
         if ui.is_rect_visible(rect) {
-            let state = ControlState::from_response(&response);
+            let mut state = ControlState::from_response(&response);
+            state.hovered |= self.submenu == Some(true);
             let painter = ui.painter();
             let rest = if self.selected {
                 r.subtle_fill_color_secondary
@@ -164,12 +169,58 @@ impl Widget for MenuItem {
                 );
                 painter.galley(pos, shortcut, secondary);
             }
+            if self.submenu.is_some() {
+                crate::utils::paint_chevron_right(
+                    painter,
+                    pos2(
+                        rect.right() - f32::from(padding.right) - 4.0,
+                        rect.center().y,
+                    ),
+                    secondary,
+                );
+            }
             if state.focused {
                 paint_focus_border(painter, rect, &theme);
             }
         }
         response
     }
+}
+
+/// A menu row that opens a nested menu to its right on hover, fluent_ui's
+/// `MenuFlyoutSubItem`. Use it inside a menu, e.g. a [`DropDownButton`] or
+/// [`context_menu`].
+///
+/// ```no_run
+/// # fn ui(ui: &mut egui::Ui) {
+/// use fluent_egui::{MenuItem, sub_menu};
+///
+/// sub_menu(ui, "Sort by", |ui| {
+///     ui.add(MenuItem::new("Name"));
+///     ui.add(MenuItem::new("Date"));
+/// });
+/// # }
+/// ```
+pub fn sub_menu<R>(
+    ui: &mut Ui,
+    text: impl Into<WidgetText>,
+    add_contents: impl FnOnce(&mut Ui) -> R,
+) -> Option<R> {
+    let id = ui.next_auto_id();
+    let open = Popup::is_id_open(
+        ui.ctx(),
+        egui::containers::menu::SubMenu::id_from_widget_id(id),
+    );
+    let mut item = MenuItem::new(text);
+    item.submenu = Some(open);
+    let response = ui.add(item);
+    egui::containers::menu::SubMenu::new()
+        .show(ui, &response, |ui| {
+            ui.set_width(200.0);
+            ui.spacing_mut().item_spacing.y = 2.0;
+            add_contents(ui)
+        })
+        .map(|r| r.inner)
 }
 
 /// A divider between groups of menu items, `MenuFlyoutSeparator`.

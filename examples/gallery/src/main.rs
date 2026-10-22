@@ -6,14 +6,15 @@
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
-    AccentColor, BreadcrumbBar, Brightness, Button, CalendarDatePicker, CalendarView, Card,
-    Checkbox, ColorPicker, ColorSpectrumShape, ComboBox, CommandBar, ContentDialog, DatePicker,
-    DialogResult, Divider, DropDownButton, Expander, FluentTheme, FluentTooltip as _,
-    IconButtonMode, InfoBadge, InfoBar, InfoLabel, MenuBar, MenuItem, NavigationView, NumberBox,
-    PaneDisplayMode, PaneItem, PasswordBox, ProgressBar, ProgressRing, ScaffoldPage, Severity,
-    Slider, SplitButton, Tab, TabView, TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView,
-    TreeViewItem, TreeViewSelectionMode, colors, combo_value, context_menu, fonts, menu_separator,
-    radio_value,
+    AccentColor, AutoSuggestBox, BreadcrumbBar, Brightness, Button, CalendarDatePicker,
+    CalendarView, Card, Checkbox, ColorPicker, ColorSpectrumShape, ComboBox, CommandBar,
+    ContentDialog, DatePicker, DialogResult, Divider, DropDownButton, Expander, FluentTheme,
+    FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel, ListTile,
+    ListTileSelectionMode, MenuBar, MenuItem, NavigationView, NumberBox, PaneDisplayMode, PaneItem,
+    PasswordBox, ProgressBar, ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton,
+    Tab, TabView, TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem,
+    TreeViewSelectionMode, colors, combo_value, context_menu, fonts, menu_separator, radio_value,
+    sub_menu,
 };
 
 fn main() -> eframe::Result {
@@ -138,6 +139,10 @@ struct Demo {
     meeting: Option<fluent_egui::Time>,
     picked_color: egui::Color32,
     box_spectrum: bool,
+    rating: f32,
+    query: String,
+    list_selected: usize,
+    list_checked: [bool; 3],
 }
 
 impl Default for Demo {
@@ -177,6 +182,10 @@ impl Default for Demo {
             meeting: fluent_egui::Time::new(14, 30),
             picked_color: egui::Color32::from_rgb(0x00, 0x78, 0xd4),
             box_spectrum: false,
+            rating: 3.5,
+            query: String::new(),
+            list_selected: 0,
+            list_checked: [true, false, false],
         }
     }
 }
@@ -348,6 +357,21 @@ fn pickers_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
     };
     ui.add(ColorPicker::new("color_picker", &mut demo.picked_color).spectrum_shape(shape));
 }
+
+const FRUITS: [&str; 12] = [
+    "Apple",
+    "Apricot",
+    "Banana",
+    "Blackberry",
+    "Blueberry",
+    "Cherry",
+    "Grape",
+    "Lemon",
+    "Mango",
+    "Orange",
+    "Peach",
+    "Pear",
+];
 
 const NAV_MODES: [(PaneDisplayMode, &str); 5] = [
     (PaneDisplayMode::Auto, "Auto"),
@@ -757,6 +781,12 @@ fn inputs_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
         );
         ui.label(format!("{:.0} (step 1)", demo.stepped));
     });
+
+    section(ui, theme, "Rating");
+    ui.horizontal(|ui| {
+        ui.add_enabled(enabled, Rating::new(&mut demo.rating));
+        ui.label(format!("{:.1}", demo.rating));
+    });
 }
 
 fn progress_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
@@ -850,6 +880,19 @@ fn text_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
         );
         ui.label(format!("price = {:.2}", demo.price));
     });
+
+    section(ui, theme, "AutoSuggestBox");
+    let out = ui
+        .add_enabled_ui(enabled, |ui| {
+            AutoSuggestBox::new("fruit", &mut demo.query, &FRUITS)
+                .placeholder("Search fruits")
+                .width(260.0)
+                .show(ui)
+        })
+        .inner;
+    if let Some(i) = out.chosen {
+        demo.last_action = format!("suggestion {}", FRUITS[i]);
+    }
 }
 
 fn menus_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
@@ -958,6 +1001,47 @@ fn surfaces_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
             .action("Learn more")
             .show(ui);
     });
+
+    section(ui, theme, "ListTile");
+    ui.horizontal_top(|ui| {
+        ui.vertical(|ui| {
+            ui.set_width(300.0);
+            ui.label(theme.typography.caption.rich("Single selection"));
+            for (i, (icon, title, subtitle)) in [
+                ("📥", "Inbox", "12 unread"),
+                ("📤", "Sent", "Last sent yesterday"),
+                ("🗑", "Deleted", "Empty"),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let tile = ListTile::new(title)
+                    .subtitle(subtitle)
+                    .leading(icon)
+                    .selection_mode(ListTileSelectionMode::Single)
+                    .selected(demo.list_selected == i);
+                if ui.add(tile).clicked() {
+                    demo.list_selected = i;
+                }
+            }
+        });
+        ui.vertical(|ui| {
+            ui.set_width(300.0);
+            ui.label(theme.typography.caption.rich("Multiple selection"));
+            for (i, title) in ["Wi-Fi", "Bluetooth", "Airplane mode"]
+                .into_iter()
+                .enumerate()
+            {
+                let tile = ListTile::new(title)
+                    .trailing(if demo.list_checked[i] { "On" } else { "Off" })
+                    .selection_mode(ListTileSelectionMode::Multiple)
+                    .selected(demo.list_checked[i]);
+                if ui.add(tile).clicked() {
+                    demo.list_checked[i] = !demo.list_checked[i];
+                }
+            }
+        });
+    });
 }
 
 fn flyouts_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
@@ -980,6 +1064,14 @@ fn flyouts_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
                     demo.last_action = format!("Edit > {item}");
                 }
             }
+            menu_separator(ui);
+            sub_menu(ui, "Transform", |ui| {
+                for item in ["Uppercase", "Lowercase", "Title case"] {
+                    if ui.add(MenuItem::new(item)).clicked() {
+                        demo.last_action = format!("Edit > Transform > {item}");
+                    }
+                }
+            });
         });
         bar.menu("Help", |ui| {
             if ui.add(MenuItem::new("About")).clicked() {
@@ -1032,6 +1124,14 @@ fn flyouts_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
                 demo.last_action = format!("context > {item}");
             }
         }
+        menu_separator(ui);
+        sub_menu(ui, "Sort by", |ui| {
+            for item in ["Name", "Date modified", "Size"] {
+                if ui.add(MenuItem::new(item)).clicked() {
+                    demo.last_action = format!("context > Sort by > {item}");
+                }
+            }
+        });
     });
 
     section(ui, theme, "Tooltip, ContentDialog, TeachingTip");
