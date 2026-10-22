@@ -1,10 +1,15 @@
 //! Fluent widgets. The layout mirrors fluent_ui's `lib/src/controls`.
 
+mod bars;
 mod button;
+mod card;
 mod checkbox;
+mod content_dialog;
 mod divider;
+mod expander;
 mod icon;
 mod info_badge;
+mod info_bar;
 mod info_label;
 mod menu;
 mod number_box;
@@ -13,15 +18,22 @@ mod radio_button;
 mod slider;
 mod text_box;
 mod toggle_switch;
+mod tooltip;
 
+pub use bars::{CommandBar, CommandBarUi, MenuBar, MenuBarUi, TeachingTip, TeachingTipResponse};
 pub use button::{Button, ButtonKind, ButtonStyle, IconButtonMode};
+pub use card::Card;
 pub use checkbox::Checkbox;
+pub use content_dialog::{ContentDialog, DialogResult};
 pub use divider::Divider;
+pub use expander::{Expander, ExpanderResponse};
 pub use icon::{icon, windows_icon};
 pub use info_badge::{InfoBadge, Severity};
+pub use info_bar::{InfoBar, InfoBarResponse};
 pub use info_label::InfoLabel;
 pub use menu::{
-    ComboBox, DropDownButton, MenuItem, SplitButton, SplitButtonResponse, combo_value, flyout_frame,
+    ComboBox, DropDownButton, MenuItem, SplitButton, SplitButtonResponse, combo_value,
+    context_menu, flyout_frame, menu_separator,
 };
 pub use number_box::{NumberBox, SpinButtonPlacement};
 pub use progress::{ProgressBar, ProgressRing};
@@ -29,6 +41,7 @@ pub use radio_button::{RadioButton, radio_value};
 pub use slider::Slider;
 pub use text_box::{PasswordBox, PasswordRevealMode, TextBox};
 pub use toggle_switch::ToggleSwitch;
+pub use tooltip::{FluentTooltip, tooltip_frame};
 
 use std::sync::Arc;
 
@@ -83,4 +96,31 @@ pub(crate) fn allocate_labeled(
         (pos, g)
     });
     (response, indicator_rect, label)
+}
+
+/// A transparent square button (like a large `IconButton`) whose glyph is
+/// painted by `paint` at the center, in the foreground color for its state.
+pub(crate) fn glyph_button(
+    ui: &mut Ui,
+    size: f32,
+    paint: impl FnOnce(&egui::Painter, Pos2, egui::Color32),
+) -> Response {
+    let theme = FluentTheme::of(ui.ctx());
+    let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
+    if ui.is_rect_visible(rect) {
+        let state = crate::utils::ControlState::from_response(&response);
+        let style = button::ButtonStyle::icon(&theme, button::IconButtonMode::Large);
+        let fill = crate::utils::animate_color(
+            ui.ctx(),
+            response.id.with("fill"),
+            style.background.resolve(state),
+            theme.faster_animation_duration,
+        );
+        ui.painter().rect_filled(rect, 4.0, fill);
+        paint(ui.painter(), rect.center(), style.foreground.resolve(state));
+        if state.focused {
+            crate::utils::paint_focus_border(ui.painter(), rect, &theme);
+        }
+    }
+    response
 }

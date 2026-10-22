@@ -6,10 +6,11 @@
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
-    AccentColor, Brightness, Button, Checkbox, ComboBox, Divider, DropDownButton, FluentTheme,
-    IconButtonMode, InfoBadge, InfoLabel, MenuItem, NumberBox, PasswordBox, ProgressBar,
-    ProgressRing, Severity, Slider, SplitButton, TextBox, ToggleSwitch, colors, combo_value, fonts,
-    radio_value,
+    AccentColor, Brightness, Button, Card, Checkbox, ComboBox, CommandBar, ContentDialog,
+    DialogResult, Divider, DropDownButton, Expander, FluentTheme, FluentTooltip as _,
+    IconButtonMode, InfoBadge, InfoBar, InfoLabel, MenuBar, MenuItem, NumberBox, PasswordBox,
+    ProgressBar, ProgressRing, Severity, Slider, SplitButton, TeachingTip, TextBox, ToggleSwitch,
+    colors, combo_value, context_menu, fonts, menu_separator, radio_value,
 };
 
 fn main() -> eframe::Result {
@@ -32,6 +33,8 @@ enum Page {
     Inputs,
     TextInput,
     Menus,
+    Surfaces,
+    Flyouts,
     Progress,
     Status,
     Colors,
@@ -41,11 +44,13 @@ enum Page {
 }
 
 impl Page {
-    const ALL: [(Page, &'static str); 10] = [
+    const ALL: [(Page, &'static str); 12] = [
         (Page::Buttons, "Buttons"),
         (Page::Inputs, "Inputs"),
         (Page::TextInput, "Text fields"),
         (Page::Menus, "Drop-downs"),
+        (Page::Surfaces, "Surfaces"),
+        (Page::Flyouts, "Flyouts & menus"),
         (Page::Progress, "Progress"),
         (Page::Status, "InfoBadge & InfoLabel"),
         (Page::Colors, "Colors"),
@@ -84,6 +89,9 @@ struct Demo {
     color: usize,
     font: Option<usize>,
     last_action: String,
+    info_visible: bool,
+    dialog_open: bool,
+    tip_open: bool,
 }
 
 impl Default for Demo {
@@ -107,6 +115,9 @@ impl Default for Demo {
             color: 0,
             font: None,
             last_action: "nothing yet".to_owned(),
+            info_visible: true,
+            dialog_open: false,
+            tip_open: false,
         }
     }
 }
@@ -215,18 +226,22 @@ impl eframe::App for Gallery {
             });
 
         egui::CentralPanel::default().show(ui, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| match self.page {
-                Page::Buttons => buttons_page(ui, &theme, &mut self.demo, &self.icon_fonts),
-                Page::Inputs => inputs_page(ui, &theme, &mut self.demo),
-                Page::TextInput => text_page(ui, &theme, &mut self.demo),
-                Page::Menus => menus_page(ui, &theme, &mut self.demo),
-                Page::Progress => progress_page(ui, &theme, &mut self.demo),
-                Page::Status => status_page(ui, &theme, &mut self.demo),
-                Page::Colors => colors_page(ui, &theme),
-                Page::Typography => typography_page(ui, &theme),
-                Page::Divider => divider_page(ui, &theme),
-                Page::Icons => icons_page(ui, &theme, &self.icon_fonts, &mut self.icon_filter),
-            });
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| match self.page {
+                    Page::Buttons => buttons_page(ui, &theme, &mut self.demo, &self.icon_fonts),
+                    Page::Inputs => inputs_page(ui, &theme, &mut self.demo),
+                    Page::TextInput => text_page(ui, &theme, &mut self.demo),
+                    Page::Menus => menus_page(ui, &theme, &mut self.demo),
+                    Page::Surfaces => surfaces_page(ui, &theme, &mut self.demo),
+                    Page::Flyouts => flyouts_page(ui, &theme, &mut self.demo),
+                    Page::Progress => progress_page(ui, &theme, &mut self.demo),
+                    Page::Status => status_page(ui, &theme, &mut self.demo),
+                    Page::Colors => colors_page(ui, &theme),
+                    Page::Typography => typography_page(ui, &theme),
+                    Page::Divider => divider_page(ui, &theme),
+                    Page::Icons => icons_page(ui, &theme, &self.icon_fonts, &mut self.icon_filter),
+                });
         });
     }
 }
@@ -647,4 +662,180 @@ fn menus_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
             }
         });
     });
+}
+
+fn surfaces_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "Surfaces");
+    let width = ui.available_width().min(560.0);
+    ui.allocate_ui(egui::vec2(width, 0.0), |ui| {
+        section(ui, theme, "Card");
+        Card::new().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(theme.typography.body_strong.rich("Card title"));
+            ui.label("Cards group related content on a surface with a subtle border.");
+        });
+
+        section(ui, theme, "Expander");
+        Expander::new("expander", "Advanced settings").show(ui, |ui| {
+            ui.add(Checkbox::new(&mut demo.checked, "Enable telemetry"));
+            ui.add(ToggleSwitch::new(&mut demo.switch, "Auto update"));
+        });
+        ui.add_space(8.0);
+        Expander::new("expander2", "Open by default").initially_open(true).show(ui, |ui| {
+            ui.label("This expander starts open.");
+        });
+
+        section(ui, theme, "InfoBar");
+        if demo.info_visible {
+            let bar = InfoBar::new("Update available")
+                .message("Restart the app to apply it.")
+                .action("Restart")
+                .closable(true)
+                .show(ui);
+            if bar.closed {
+                demo.info_visible = false;
+            }
+            if bar.action_clicked {
+                demo.last_action = "restart from InfoBar".to_owned();
+            }
+        } else if ui.add(Button::hyperlink("Show the closable InfoBar again")).clicked() {
+            demo.info_visible = true;
+        }
+        for (severity, title, message) in [
+            (Severity::Warning, "Low disk space", "Free some space soon."),
+            (Severity::Success, "Saved", "All changes are on disk."),
+            (Severity::Error, "Sync failed", "Check your connection."),
+        ] {
+            ui.add_space(8.0);
+            InfoBar::new(title).message(message).severity(severity).show(ui);
+        }
+        ui.add_space(8.0);
+        InfoBar::new("Long InfoBar")
+            .message("Title, message and action stack vertically when the bar is long, which suits longer explanations like this one.")
+            .long(true)
+            .action("Learn more")
+            .show(ui);
+    });
+}
+
+fn flyouts_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    page_title(ui, theme, "Flyouts & menus");
+
+    section(ui, theme, "MenuBar");
+    MenuBar::new().show(ui, |bar| {
+        bar.menu("File", |ui| {
+            for (item, shortcut) in [("New", "Ctrl+N"), ("Open", "Ctrl+O"), ("Save", "Ctrl+S")] {
+                if ui.add(MenuItem::new(item).shortcut(shortcut)).clicked() {
+                    demo.last_action = format!("File > {item}");
+                }
+            }
+            menu_separator(ui);
+            if ui.add(MenuItem::new("Exit")).clicked() {
+                demo.last_action = "File > Exit".to_owned();
+            }
+        });
+        bar.menu("Edit", |ui| {
+            for item in ["Undo", "Cut", "Copy", "Paste"] {
+                if ui.add(MenuItem::new(item)).clicked() {
+                    demo.last_action = format!("Edit > {item}");
+                }
+            }
+        });
+        bar.menu("Help", |ui| {
+            if ui.add(MenuItem::new("About")).clicked() {
+                demo.last_action = "Help > About".to_owned();
+            }
+        });
+    });
+
+    section(ui, theme, "CommandBar");
+    // Both closures report through a Cell, since they can't both borrow demo.
+    let picked = std::cell::Cell::new(None::<String>);
+    CommandBar::new().show_with_overflow(
+        ui,
+        |bar| {
+            for (icon, label) in [("➕", "New"), ("✏", "Edit"), ("🗑", "Delete")] {
+                if bar.button(icon, label).clicked() {
+                    picked.set(Some(format!("command {label}")));
+                }
+            }
+            bar.separator();
+            if bar.icon_button("🔗").fluent_tooltip("Share").clicked() {
+                picked.set(Some("command Share".to_owned()));
+            }
+        },
+        |ui| {
+            for item in ["Settings", "Help"] {
+                if ui.add(MenuItem::new(item)).clicked() {
+                    picked.set(Some(format!("more > {item}")));
+                }
+            }
+        },
+    );
+    if let Some(action) = picked.take() {
+        demo.last_action = action;
+    }
+
+    section(ui, theme, "Context menu (right-click the card)");
+    let card = Card::new().show(ui, |ui| {
+        ui.set_width(300.0);
+        ui.label("Right-click here");
+    });
+    let card = ui.interact(
+        card.response.rect,
+        ui.scope_id().with("ctx_card"),
+        egui::Sense::click(),
+    );
+    context_menu(&card, |ui| {
+        for (item, shortcut) in [("Cut", "Ctrl+X"), ("Copy", "Ctrl+C"), ("Paste", "Ctrl+V")] {
+            if ui.add(MenuItem::new(item).shortcut(shortcut)).clicked() {
+                demo.last_action = format!("context > {item}");
+            }
+        }
+    });
+
+    section(ui, theme, "Tooltip, ContentDialog, TeachingTip");
+    ui.horizontal(|ui| {
+        ui.add(Button::new("Hover me"))
+            .fluent_tooltip("A Fluent tooltip");
+        if ui.add(Button::filled("Open dialog")).clicked() {
+            demo.dialog_open = true;
+        }
+        let tip_target = ui.add(Button::new("Show teaching tip"));
+        if tip_target.clicked() {
+            demo.tip_open = true;
+        }
+        let tip = TeachingTip::new("Teaching tip")
+            .subtitle("Point people at features they may have missed.")
+            .action("Got it")
+            .show(&tip_target, &mut demo.tip_open);
+        if tip.action_clicked {
+            demo.last_action = "teaching tip action".to_owned();
+        }
+    });
+    ui.add_space(8.0);
+    ui.label(
+        theme
+            .typography
+            .caption
+            .rich(format!("Last action: {}", demo.last_action)),
+    );
+
+    if demo.dialog_open {
+        let result = ContentDialog::new("demo_dialog", "Delete file permanently?")
+            .body("If you delete this file, you won't be able to recover it. Do you want to delete it?")
+            .primary_button("Delete")
+            .secondary_button("Move to bin")
+            .close_button("Cancel")
+            .show(ui.ctx());
+        if let Some(result) = result {
+            demo.dialog_open = false;
+            demo.last_action = match result {
+                DialogResult::Primary => "dialog: delete",
+                DialogResult::Secondary => "dialog: move to bin",
+                DialogResult::Close => "dialog: cancel",
+            }
+            .to_owned();
+        }
+    }
 }

@@ -37,6 +37,8 @@ pub fn flyout_frame(theme: &FluentTheme) -> Frame {
 /// One row of a menu or combo box list, like fluent_ui's `MenuFlyoutItem`.
 pub struct MenuItem {
     text: WidgetText,
+    icon: Option<WidgetText>,
+    shortcut: Option<WidgetText>,
     selected: bool,
 }
 
@@ -44,8 +46,23 @@ impl MenuItem {
     pub fn new(text: impl Into<WidgetText>) -> Self {
         Self {
             text: text.into(),
+            icon: None,
+            shortcut: None,
             selected: false,
         }
+    }
+
+    /// A leading icon, e.g. [`crate::icon`].
+    pub fn icon(mut self, icon: impl Into<WidgetText>) -> Self {
+        self.icon = Some(icon.into());
+        self
+    }
+
+    /// Keyboard shortcut text shown right-aligned, like "Ctrl+C". Only a
+    /// label: handle the keys yourself.
+    pub fn shortcut(mut self, shortcut: impl Into<WidgetText>) -> Self {
+        self.shortcut = Some(shortcut.into());
+        self
     }
 
     /// Marks the row as the current choice: subtle fill and an accent pill
@@ -61,19 +78,26 @@ impl Widget for MenuItem {
         let theme = FluentTheme::of(ui.ctx());
         let r = &theme.resources;
         let label = self.text.text().to_owned();
-        let galley = self.text.into_galley(
-            ui,
-            Some(TextWrapMode::Extend),
-            f32::INFINITY,
-            theme.typography.body.font_id(),
-        );
+        let layout = |text: WidgetText, ui: &Ui, font: egui::FontId| {
+            text.into_galley(ui, Some(TextWrapMode::Extend), f32::INFINITY, font)
+        };
+        let galley = layout(self.text, ui, theme.typography.body.font_id());
+        let icon = self
+            .icon
+            .map(|i| layout(i, ui, egui::FontId::proportional(16.0)));
+        let shortcut = self
+            .shortcut
+            .map(|s| layout(s, ui, theme.typography.caption.font_id()));
         let padding = Margin {
             left: 12,
             right: 12,
             top: 6,
             bottom: 6,
         };
-        let width = ui.available_width().max(galley.size().x + padding.sum().x);
+        let icon_width = if icon.is_some() { 28.0 } else { 0.0 };
+        let shortcut_width = shortcut.as_ref().map_or(0.0, |g| g.size().x + 24.0);
+        let content_width = icon_width + galley.size().x + shortcut_width + padding.sum().x;
+        let width = ui.available_width().max(content_width);
         let size = Vec2::new(width, (galley.size().y + padding.sum().y).max(32.0));
         let (rect, response) = ui.allocate_exact_size(size, Sense::click());
         response.widget_info(|| {
@@ -118,17 +142,62 @@ impl Widget for MenuItem {
             } else {
                 r.text_fill_color_primary
             };
-            let pos = pos2(
-                rect.left() + f32::from(padding.left),
-                rect.center().y - galley.size().y / 2.0,
+            let secondary = if state.disabled {
+                r.text_fill_color_disabled
+            } else {
+                r.text_fill_color_secondary
+            };
+            let mut x = rect.left() + f32::from(padding.left);
+            if let Some(icon) = icon {
+                painter.galley(pos2(x, rect.center().y - icon.size().y / 2.0), icon, color);
+                x += icon_width;
+            }
+            painter.galley(
+                pos2(x, rect.center().y - galley.size().y / 2.0),
+                galley,
+                color,
             );
-            painter.galley(pos, galley, color);
+            if let Some(shortcut) = shortcut {
+                let pos = pos2(
+                    rect.right() - f32::from(padding.right) - shortcut.size().x,
+                    rect.center().y - shortcut.size().y / 2.0,
+                );
+                painter.galley(pos, shortcut, secondary);
+            }
             if state.focused {
                 paint_focus_border(painter, rect, &theme);
             }
         }
         response
     }
+}
+
+/// A divider between groups of menu items, `MenuFlyoutSeparator`.
+pub fn menu_separator(ui: &mut Ui) -> Response {
+    let theme = FluentTheme::of(ui.ctx());
+    let (rect, response) =
+        ui.allocate_exact_size(Vec2::new(ui.available_width(), 5.0), Sense::hover());
+    let y = rect.center().y;
+    ui.painter().hline(
+        (rect.left() - 4.0)..=(rect.right() + 4.0),
+        y,
+        Stroke::new(1.0, theme.resources.divider_stroke_color_default),
+    );
+    response
+}
+
+/// Shows a Fluent menu when `response` is right-clicked, like fluent_ui's
+/// `MenuFlyout` used as a context menu.
+pub fn context_menu<R>(response: &Response, add_contents: impl FnOnce(&mut Ui) -> R) -> Option<R> {
+    let theme = FluentTheme::of(&response.ctx);
+    Popup::context_menu(response)
+        .frame(flyout_frame(&theme))
+        .width(200.0)
+        .show(|ui| {
+            ui.spacing_mut().item_spacing.y = 2.0;
+            add_contents(ui)
+        })
+        .map(|r| r.inner)
 }
 
 /// A button that opens a menu, fluent_ui's `DropDownButton`.
