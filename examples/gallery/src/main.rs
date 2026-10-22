@@ -6,13 +6,14 @@
 use eframe::egui;
 use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
-    AccentColor, BreadcrumbBar, Brightness, Button, Card, Checkbox, ComboBox, CommandBar,
-    ContentDialog, DialogResult, Divider, DropDownButton, Expander, FluentTheme,
-    FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel, MenuBar, MenuItem,
-    NavigationView, NumberBox, PaneDisplayMode, PaneItem, PasswordBox, ProgressBar, ProgressRing,
-    ScaffoldPage, Severity, Slider, SplitButton, Tab, TabView, TeachingTip, TextBox, ToggleSwitch,
-    TreeView, TreeViewItem, TreeViewSelectionMode, colors, combo_value, context_menu, fonts,
-    menu_separator, radio_value,
+    AccentColor, BreadcrumbBar, Brightness, Button, CalendarDatePicker, CalendarView, Card,
+    Checkbox, ColorPicker, ColorSpectrumShape, ComboBox, CommandBar, ContentDialog, DatePicker,
+    DialogResult, Divider, DropDownButton, Expander, FluentTheme, FluentTooltip as _,
+    IconButtonMode, InfoBadge, InfoBar, InfoLabel, MenuBar, MenuItem, NavigationView, NumberBox,
+    PaneDisplayMode, PaneItem, PasswordBox, ProgressBar, ProgressRing, ScaffoldPage, Severity,
+    Slider, SplitButton, Tab, TabView, TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView,
+    TreeViewItem, TreeViewSelectionMode, colors, combo_value, context_menu, fonts, menu_separator,
+    radio_value,
 };
 
 fn main() -> eframe::Result {
@@ -38,6 +39,7 @@ enum Page {
     Surfaces,
     Flyouts,
     Navigation,
+    Pickers,
     Progress,
     Status,
     Colors,
@@ -54,7 +56,7 @@ enum Entry {
 }
 
 impl Page {
-    const PANE: [Entry; 17] = [
+    const PANE: [Entry; 18] = [
         Entry::Header("Controls"),
         Entry::Page(Page::Buttons, "🔘", "Buttons"),
         Entry::Page(Page::Inputs, "☑", "Inputs"),
@@ -64,6 +66,7 @@ impl Page {
         Entry::Page(Page::Surfaces, "🗖", "Surfaces"),
         Entry::Page(Page::Flyouts, "💬", "Flyouts & menus"),
         Entry::Page(Page::Navigation, "🗺", "Navigation"),
+        Entry::Page(Page::Pickers, "📅", "Pickers"),
         Entry::Header("Status"),
         Entry::Page(Page::Progress, "⏳", "Progress"),
         Entry::Page(Page::Status, "🔔", "InfoBadge & InfoLabel"),
@@ -128,6 +131,13 @@ struct Demo {
     path: Vec<&'static str>,
     tree_single: Vec<&'static str>,
     tree_multiple: Vec<&'static str>,
+    date: Option<fluent_egui::Date>,
+    due: Option<fluent_egui::Date>,
+    birthday: Option<fluent_egui::Date>,
+    alarm: Option<fluent_egui::Time>,
+    meeting: Option<fluent_egui::Time>,
+    picked_color: egui::Color32,
+    box_spectrum: bool,
 }
 
 impl Default for Demo {
@@ -160,6 +170,13 @@ impl Default for Demo {
             path: BREADCRUMB.to_vec(),
             tree_single: vec!["vacation.jpg"],
             tree_multiple: vec!["cv.pdf"],
+            date: None,
+            due: None,
+            birthday: fluent_egui::Date::new(1990, 6, 15),
+            alarm: None,
+            meeting: fluent_egui::Time::new(14, 30),
+            picked_color: egui::Color32::from_rgb(0x00, 0x78, 0xd4),
+            box_spectrum: false,
         }
     }
 }
@@ -253,6 +270,7 @@ impl eframe::App for Gallery {
                                 Page::Surfaces => surfaces_page(ui, &theme, &mut self.demo),
                                 Page::Flyouts => flyouts_page(ui, &theme, &mut self.demo),
                                 Page::Navigation => navigation_page(ui, &theme, &mut self.demo),
+                                Page::Pickers => pickers_page(ui, &theme, &mut self.demo),
                                 Page::Progress => progress_page(ui, &theme, &mut self.demo),
                                 Page::Status => status_page(ui, &theme, &mut self.demo),
                                 Page::Colors => colors_page(ui, &theme),
@@ -271,6 +289,64 @@ impl eframe::App for Gallery {
             });
         self.page = page;
     }
+}
+
+fn pickers_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
+    let caption = |ui: &mut egui::Ui, text: String| {
+        ui.label(theme.typography.caption.rich(text));
+    };
+    section(ui, theme, "DatePicker");
+    ui.add(DatePicker::new("birthday", &mut demo.birthday));
+    caption(
+        ui,
+        format!("Value: {:?}", demo.birthday.map(|d| d.to_string())),
+    );
+
+    section(
+        ui,
+        theme,
+        "TimePicker (12-hour, and 24-hour in 15 minute steps)",
+    );
+    ui.horizontal(|ui| {
+        ui.add(TimePicker::new("alarm", &mut demo.alarm));
+        ui.add_space(12.0);
+        ui.add(
+            TimePicker::new("meeting", &mut demo.meeting)
+                .use_24_hour(true)
+                .minute_increment(15),
+        );
+    });
+    caption(
+        ui,
+        format!(
+            "Values: {:?}, {:?}",
+            demo.alarm.map(|t| t.to_string()),
+            demo.meeting.map(|t| t.to_string())
+        ),
+    );
+
+    section(ui, theme, "CalendarDatePicker");
+    ui.add(CalendarDatePicker::new("due", &mut demo.due));
+
+    section(ui, theme, "CalendarView");
+    ui.add(CalendarView::new("calendar", &mut demo.date));
+    caption(
+        ui,
+        match demo.date {
+            Some(date) => format!("Picked {date}"),
+            None => "Nothing picked yet".to_owned(),
+        },
+    );
+
+    section(ui, theme, "ColorPicker");
+    ui.add(ToggleSwitch::new(&mut demo.box_spectrum, "Box spectrum"));
+    ui.add_space(8.0);
+    let shape = if demo.box_spectrum {
+        ColorSpectrumShape::Box
+    } else {
+        ColorSpectrumShape::Ring
+    };
+    ui.add(ColorPicker::new("color_picker", &mut demo.picked_color).spectrum_shape(shape));
 }
 
 const NAV_MODES: [(PaneDisplayMode, &str); 5] = [

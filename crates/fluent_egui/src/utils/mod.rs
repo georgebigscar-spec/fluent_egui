@@ -7,6 +7,7 @@ mod glyphs;
 mod interaction;
 mod paint;
 mod states;
+mod wheel;
 
 pub use animate::animate_color;
 pub use color::{lerp, with_alpha};
@@ -18,3 +19,4 @@ pub use glyphs::{
 pub use interaction::ControlState;
 pub use paint::{paint_arc, paint_elevation_border};
 pub use states::States;
+pub use wheel::wheel_steps;

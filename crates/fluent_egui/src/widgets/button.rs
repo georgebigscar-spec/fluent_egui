@@ -373,7 +373,12 @@ impl Widget for Button<'_> {
     }
 }
 
-fn paint_border(painter: &egui::Painter, rect: Rect, radius: CornerRadius, border: ButtonBorder) {
+pub(crate) fn paint_border(
+    painter: &egui::Painter,
+    rect: Rect,
+    radius: CornerRadius,
+    border: ButtonBorder,
+) {
     match border {
         ButtonBorder::None => {}
         ButtonBorder::Solid(color) => paint_elevation_border(painter, rect, radius, color, color),

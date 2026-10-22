@@ -12,7 +12,10 @@ Windows 11 type ramp), icon codepoints, and the basic controls: `Button`
 and the surfaces and flyouts: `Card`, `Expander`, `InfoBar`, tooltips,
 `MenuFlyout`/context menus, `ContentDialog`, `MenuBar`, `CommandBar` and
 `TeachingTip`, and navigation: `NavigationView` (open, compact, minimal and
-top panes), `ScaffoldPage`, `TabView`, `BreadcrumbBar` and `TreeView`.
+top panes), `ScaffoldPage`, `TabView`, `BreadcrumbBar` and `TreeView`, and the
+pickers: `CalendarView`, `CalendarDatePicker`, `DatePicker`, `TimePicker` and
+`ColorPicker`. Dates and times use the crate's own small `Date` and `Time`
+types, so no date library is pulled in.
 
 ```rust
 use fluent_egui::{Brightness, FluentTheme};
@@ -66,7 +69,8 @@ and `SEGOE_ICONS_TTF` environment variables.
 5. ✅ Navigation: ScaffoldPage, NavigationView, TabView, BreadcrumbBar, TreeView.
    (Nested pane items, AutoSuggestBox in the pane and tab keyboard shortcuts
    are still to do.)
-6. Pickers: DatePicker, TimePicker, CalendarView, ColorPicker.
+6. ✅ Pickers: DatePicker, TimePicker, CalendarView, ColorPicker. (Range and
+   multiple selection in CalendarView and localized names are still to do.)
 7. Extras: Acrylic/Mica, page transitions, DynamicOverflow, localization.
 
 ## License
