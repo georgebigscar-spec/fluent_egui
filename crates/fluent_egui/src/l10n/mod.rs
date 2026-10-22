@@ -9,8 +9,10 @@
 //! # }
 //! ```
 
+mod dates;
 mod strings;
 
+pub use dates::{DATE_NAMES, DateNames};
 pub use strings::{ALL, Localizations};
 
 impl Default for Localizations {
@@ -49,6 +51,11 @@ impl Localizations {
         ctx.data_mut(|d| d.insert_temp(egui::Id::NULL, self));
     }
 
+    /// Month and weekday names for this locale.
+    pub fn date_names(&self) -> &'static DateNames {
+        DateNames::for_locale(self.locale)
+    }
+
     /// The colour slider tooltip, "Value 50 (Red)" in English.
     pub fn format_value_slider_tooltip(&self, value: i32, color_name: &str) -> String {
         self.value_slider_tooltip
@@ -74,6 +81,18 @@ mod tests {
         assert_eq!(Localizations::for_locale("zh").locale, "zh");
         assert_eq!(Localizations::for_locale("xx").locale, "en");
         assert_eq!(Localizations::RU.close_button_label, "Закрыть");
+        assert_eq!(Localizations::RU.date_names().month(3), "Март");
+        assert_eq!(Localizations::for_locale("pt-BR").date_names().locale, "pt");
+        assert_eq!(Localizations::TA.date_names().locale, "en");
+        for names in DATE_NAMES {
+            assert!(
+                names
+                    .months
+                    .iter()
+                    .chain(&names.weekdays)
+                    .all(|n| !n.is_empty())
+            );
+        }
     }
 
     #[test]

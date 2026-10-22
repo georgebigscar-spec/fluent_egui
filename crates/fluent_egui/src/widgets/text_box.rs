@@ -5,7 +5,7 @@ use egui::{
 };
 
 use crate::FluentTheme;
-use crate::utils::{ControlState, paint_eye};
+use crate::utils::{ControlState, paint_close, paint_eye};
 
 /// fluent_ui's `kTextBoxPadding`.
 const PADDING: Margin = Margin {
@@ -25,6 +25,7 @@ pub struct TextBox<'a> {
     id_salt: Option<IdSalt>,
     /// Extra room on the right for buttons drawn over the field.
     trailing: f32,
+    clear_button: bool,
 }
 
 impl<'a> TextBox<'a> {
@@ -37,6 +38,7 @@ impl<'a> TextBox<'a> {
             width: None,
             id_salt: None,
             trailing: 0.0,
+            clear_button: false,
         }
     }
 
@@ -70,6 +72,13 @@ impl<'a> TextBox<'a> {
         self
     }
 
+    /// A button that empties the field, shown on a focused single-line box
+    /// that has text, like WinUI's delete button.
+    pub fn clear_button(mut self, clear_button: bool) -> Self {
+        self.clear_button = clear_button;
+        self
+    }
+
     pub(crate) fn trailing(mut self, trailing: f32) -> Self {
         self.trailing = trailing;
         self
@@ -98,9 +107,25 @@ impl<'a> TextBox<'a> {
         } else {
             r.text_fill_color_secondary
         };
+        let clear_id = edit_id.with("fluent_clear");
+        // Clicking the clear button takes focus from the field; give it back.
+        if let Some(id) = ui.data_mut(|d| {
+            d.remove_temp::<Option<egui::Id>>(clear_id.with("refocus"))
+                .flatten()
+        }) {
+            ui.memory_mut(|m| m.request_focus(id));
+        }
+        let clear_hovered = ui.data(|d| d.get_temp::<bool>(clear_id)).unwrap_or(false);
+        let show_clear = self.clear_button
+            && self.rows.is_none()
+            && enabled
+            && !self.text.is_empty()
+            && (focused_before || clear_hovered);
+        let trailing = self.trailing + if show_clear { 28.0 } else { 0.0 };
+        let text = self.text;
         let mut edit = match self.rows {
-            Some(rows) => TextEdit::multiline(self.text).desired_rows(rows),
-            None => TextEdit::singleline(self.text),
+            Some(rows) => TextEdit::multiline(&mut *text).desired_rows(rows),
+            None => TextEdit::singleline(&mut *text),
         };
         if let Some(id) = self.id_salt {
             edit = edit.id_salt(id);
@@ -115,7 +140,7 @@ impl<'a> TextBox<'a> {
         }
         let font = theme.typography.body.font_id();
         let mut margin = PADDING;
-        margin.right += self.trailing.round() as i8;
+        margin.right += trailing.round() as i8;
         if self.rows.is_none() {
             // Center a single line in the 32px field; fluent_ui gets this from
             // the 20px line height, egui rows are shorter.
@@ -124,7 +149,7 @@ impl<'a> TextBox<'a> {
             margin.top = top;
             margin.bottom = top;
         }
-        let output = edit
+        let mut output = edit
             // A custom frame makes TextEdit ignore `.margin()`, so the padding
             // goes on the frame.
             .frame(Frame::NONE.inner_margin(margin))
@@ -185,6 +210,35 @@ impl<'a> TextBox<'a> {
             ));
         }
         ui.painter().set(background, Shape::Vec(shapes));
+
+        let mut hovered = false;
+        if show_clear {
+            let button = Rect::from_center_size(
+                pos2(rect.right() - self.trailing - 18.0, rect.center().y),
+                Vec2::new(28.0, 24.0),
+            );
+            let b = ui.interact(button, clear_id.with("button"), Sense::CLICK);
+            hovered = b.hovered();
+            let b_state = ControlState::from_response(&b);
+            let fill = b_state.pick(
+                r.subtle_fill_color_transparent,
+                r.subtle_fill_color_secondary,
+                r.subtle_fill_color_tertiary,
+                r.subtle_fill_color_transparent,
+            );
+            ui.painter().rect_filled(button, 4.0, fill);
+            paint_close(ui.painter(), button.center(), r.text_fill_color_secondary);
+            if b.clicked() {
+                text.clear();
+                output.response.response.mark_changed();
+                let id = output.response.response.id;
+                ui.data_mut(|d| d.insert_temp(clear_id.with("refocus"), Some(id)));
+                ui.ctx().request_repaint();
+            }
+        }
+        if hovered != clear_hovered {
+            ui.data_mut(|d| d.insert_temp(clear_id, hovered));
+        }
         output
     }
 }

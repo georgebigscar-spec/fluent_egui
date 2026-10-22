@@ -1,22 +1,28 @@
 use std::ops::RangeInclusive;
 
-use egui::{Key, Rect, Response, Sense, Ui, Vec2, Widget, WidgetInfo, pos2};
+use egui::{
+    Area, Key, Order, Pos2, Rect, Response, Sense, Ui, Vec2, Widget, WidgetInfo, pos2, vec2,
+};
 
 use super::button::accent_fill;
+use super::tooltip::tooltip_frame;
 use crate::FluentTheme;
 use crate::utils::{ControlState, paint_focus_border};
 
 const THUMB_RADIUS: f32 = 10.0;
 const TRACK_HEIGHT: f32 = 3.75;
 
-/// A horizontal Fluent slider, fluent_ui's `Slider`.
+/// A Fluent slider, fluent_ui's `Slider`. Horizontal by default,
+/// [`Slider::vertical`] for a vertical one with the minimum at the bottom.
 ///
 /// Drag the thumb, click the track, or use the arrow keys while focused.
 pub struct Slider<'a> {
     value: &'a mut f32,
     range: RangeInclusive<f32>,
     step: Option<f32>,
-    width: Option<f32>,
+    length: Option<f32>,
+    vertical: bool,
+    label: Option<Box<dyn Fn(f32) -> String + 'a>>,
 }
 
 impl<'a> Slider<'a> {
@@ -25,7 +31,9 @@ impl<'a> Slider<'a> {
             value,
             range,
             step: None,
-            width: None,
+            length: None,
+            vertical: false,
+            label: None,
         }
     }
 
@@ -36,10 +44,35 @@ impl<'a> Slider<'a> {
         self
     }
 
-    /// Total width. Defaults to 200 or the available width, whichever is
-    /// smaller.
+    /// Total width (height when vertical). Defaults to 200 or the available
+    /// space, whichever is smaller.
     pub fn width(mut self, width: f32) -> Self {
-        self.width = Some(width);
+        self.length = Some(width);
+        self
+    }
+
+    /// Lays the slider out bottom to top, fluent_ui's `Axis.vertical`.
+    pub fn vertical(mut self, vertical: bool) -> Self {
+        self.vertical = vertical;
+        self
+    }
+
+    /// Shows the value in a tooltip by the thumb while it is hovered or
+    /// dragged, fluent_ui's `label`. Whole numbers show without decimals,
+    /// others with one.
+    pub fn value_tooltip(self) -> Self {
+        self.value_label(|v| {
+            if v.fract() == 0.0 {
+                format!("{v:.0}")
+            } else {
+                format!("{v:.1}")
+            }
+        })
+    }
+
+    /// Like [`Slider::value_tooltip`] with custom text.
+    pub fn value_label(mut self, label: impl Fn(f32) -> String + 'a) -> Self {
+        self.label = Some(Box::new(label));
         self
     }
 
@@ -57,24 +90,52 @@ impl Widget for Slider<'_> {
     fn ui(self, ui: &mut Ui) -> Response {
         let theme = FluentTheme::of(ui.ctx());
         let r = &theme.resources;
-        let width = self
-            .width
-            .unwrap_or_else(|| ui.available_width().min(200.0));
-        let (rect, mut response) =
-            ui.allocate_exact_size(Vec2::new(width, 32.0), Sense::click_and_drag());
+        let vertical = self.vertical;
+        let available = if vertical {
+            ui.available_height()
+        } else {
+            ui.available_width()
+        };
+        let length = self.length.unwrap_or_else(|| available.min(200.0));
+        let size = if vertical {
+            vec2(32.0, length)
+        } else {
+            vec2(length, 32.0)
+        };
+        let (rect, mut response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let (min, max) = (*self.range.start(), *self.range.end());
         let span = max - min;
-        let track_x = (rect.left() + THUMB_RADIUS)..=(rect.right() - THUMB_RADIUS);
-        let track_width = track_x.end() - track_x.start();
+        let track_length = length - 2.0 * THUMB_RADIUS;
+        // The point on the track at fraction `t`, and back.
+        let point = |t: f32| -> Pos2 {
+            if vertical {
+                pos2(
+                    rect.center().x,
+                    rect.bottom() - THUMB_RADIUS - t * track_length,
+                )
+            } else {
+                pos2(
+                    rect.left() + THUMB_RADIUS + t * track_length,
+                    rect.center().y,
+                )
+            }
+        };
+        let fraction = |p: Pos2| -> f32 {
+            let along = if vertical {
+                rect.bottom() - THUMB_RADIUS - p.y
+            } else {
+                p.x - rect.left() - THUMB_RADIUS
+            };
+            (along / track_length).clamp(0.0, 1.0)
+        };
 
         let old = *self.value;
         let mut new = old;
         if let Some(p) = response.interact_pointer_pos()
             && (response.dragged() || response.clicked())
-            && track_width > 0.0
+            && track_length > 0.0
         {
-            let t = ((p.x - track_x.start()) / track_width).clamp(0.0, 1.0);
-            new = min + t * span;
+            new = min + fraction(p) * span;
         }
         if response.has_focus() {
             let step = self.step.unwrap_or(span / 100.0);
@@ -101,17 +162,16 @@ impl Widget for Slider<'_> {
         let value = *self.value;
         response.widget_info(|| WidgetInfo::slider(ui.is_enabled(), value as f64, ""));
 
+        let t = if span == 0.0 {
+            0.0
+        } else {
+            ((value - min) / span).clamp(0.0, 1.0)
+        };
+        let center = point(t);
         if ui.is_rect_visible(rect) {
             let state = ControlState::from_response(&response);
             let sliding = response.dragged();
             let painter = ui.painter();
-            let t = if span == 0.0 {
-                0.0
-            } else {
-                ((value - min) / span).clamp(0.0, 1.0)
-            };
-            let thumb_x = track_x.start() + t * track_width;
-            let cy = rect.center().y;
 
             let active = accent_fill(&theme).resolve(state);
             let inactive = if state.disabled {
@@ -119,18 +179,10 @@ impl Widget for Slider<'_> {
             } else {
                 r.control_strong_fill_color_default
             };
-            let track = |from: f32, to: f32| {
-                Rect::from_min_max(
-                    pos2(from, cy - TRACK_HEIGHT / 2.0),
-                    pos2(to, cy + TRACK_HEIGHT / 2.0),
-                )
-            };
-            painter.rect_filled(
-                track(*track_x.start(), *track_x.end()),
-                TRACK_HEIGHT / 2.0,
-                inactive,
-            );
-            painter.rect_filled(track(*track_x.start(), thumb_x), TRACK_HEIGHT / 2.0, active);
+            let track =
+                |from: Pos2, to: Pos2| Rect::from_two_pos(from, to).expand(TRACK_HEIGHT / 2.0);
+            painter.rect_filled(track(point(0.0), point(1.0)), TRACK_HEIGHT / 2.0, inactive);
+            painter.rect_filled(track(point(0.0), center), TRACK_HEIGHT / 2.0, active);
 
             // Thumb ball: a solid disc with an accent dot that grows on hover
             // and shrinks while pressed (`thumbBallInnerFactor`).
@@ -146,7 +198,6 @@ impl Widget for Slider<'_> {
                 factor,
                 theme.fast_animation_duration.as_secs_f32(),
             );
-            let center = pos2(thumb_x, cy);
             painter.circle_filled(center, THUMB_RADIUS, r.control_solid_fill_color_default);
             painter.circle_stroke(
                 center,
@@ -158,6 +209,39 @@ impl Widget for Slider<'_> {
                 let thumb = Rect::from_center_size(center, Vec2::splat(THUMB_RADIUS * 2.0));
                 paint_focus_border(painter, thumb, &theme);
             }
+        }
+
+        if let Some(label) = &self.label
+            && (response.dragged() || response.hovered() || response.has_focus())
+            && ui.is_enabled()
+        {
+            let text = label(value);
+            let caption = theme.typography.caption.font_id();
+            let galley = ui.fonts_mut(|f| {
+                f.layout_no_wrap(text, caption, theme.resources.text_fill_color_primary)
+            });
+            let frame = tooltip_frame(&theme);
+            let size = galley.size() + frame.total_margin().sum();
+            // Above the thumb, or to its left when vertical.
+            let pos = if vertical {
+                center - vec2(THUMB_RADIUS + 8.0 + size.x, size.y / 2.0)
+            } else {
+                center - vec2(size.x / 2.0, THUMB_RADIUS + 8.0 + size.y)
+            };
+            Area::new(response.id.with("fluent_slider_label"))
+                .order(Order::Tooltip)
+                .fixed_pos(pos)
+                .interactable(false)
+                .show(ui.ctx(), |ui| {
+                    frame.show(ui, |ui| {
+                        ui.painter().galley(
+                            ui.cursor().min,
+                            galley.clone(),
+                            theme.resources.text_fill_color_primary,
+                        );
+                        ui.allocate_space(galley.size());
+                    });
+                });
         }
         response
     }

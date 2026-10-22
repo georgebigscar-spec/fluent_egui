@@ -52,9 +52,21 @@ cargo run -p codegen -- /tmp/fluent_ui
 
 ## Fonts
 
-No fonts are bundled. Segoe UI Variable and the icon fonts used by fluent_ui are
-not freely redistributable, so register the ones you may ship with
-`fluent_egui::fonts`. The gallery picks up icon fonts from the `FLUENT_ICONS_TTF`
+Segoe UI Variable and the icon fonts used by fluent_ui are not freely
+redistributable, so register the ones you may ship with `fluent_egui::fonts`.
+The default `selawik` feature bundles Selawik Regular and Semibold (SIL OFL
+1.1, see `crates/fluent_egui/assets/fonts`), Microsoft's open Segoe UI
+fallback, so headings get their semibold weight:
+
+```rust
+let mut defs = egui::FontDefinitions::default();
+fluent_egui::fonts::add_selawik(&mut defs);
+ctx.set_fonts(defs);
+FluentTheme::new(Brightness::Light).with_semibold_font().install(ctx);
+```
+
+Selawik covers Latin only, so Cyrillic and other scripts fall back to egui's
+default font in regular weight. The gallery picks up icon fonts from the `FLUENT_ICONS_TTF`
 and `SEGOE_ICONS_TTF` environment variables.
 
 ## Porting roadmap
@@ -68,16 +80,19 @@ and `SEGOE_ICONS_TTF` environment variables.
 4. ✅ Surfaces and flyouts: Card, Expander, ListTile, InfoBar, Tooltip, Flyout,
    MenuFlyout (with submenus), ContentDialog, CommandBar, MenuBar, TeachingTip.
 5. ✅ Navigation: ScaffoldPage, NavigationView, TabView, BreadcrumbBar, TreeView.
-   (Nested pane items, AutoSuggestBox in the pane and tab keyboard shortcuts
-   are still to do.)
-6. ✅ Pickers: DatePicker, TimePicker, CalendarView, ColorPicker. (Range and
-   multiple selection in CalendarView and localized names are still to do.)
+   Nested pane items, a search box in the pane and the TabView keyboard
+   shortcuts (Ctrl+T, Ctrl+W, Ctrl+Tab, Ctrl+1 to 9) are in.
+6. ✅ Pickers: DatePicker, TimePicker, CalendarView (single, multiple and
+   range selection), ColorPicker.
 7. ✅ Extras: Acrylic/Mica, page transitions (Entrance, DrillIn,
    HorizontalSlide, Suppress, used by NavigationView), localization
    (`Localizations`, generated from fluent_ui's ARB files). egui has no
    backdrop blur, so Acrylic shows the backdrop unblurred under its luminosity
-   layer, and Mica is the solid base colour. (DynamicOverflow and localized
-   month and weekday names are still to do.)
+   layer, and Mica is the solid base colour. DynamicOverflow, localized month
+   and weekday names (29 languages) and the first day of the week per locale
+   are in.
+8. ✅ Polish: clear button in text fields, Slider value tooltip and vertical
+   slider, TeachingTip tail, bundled Selawik Semibold for headings.
 
 ## Localization
 

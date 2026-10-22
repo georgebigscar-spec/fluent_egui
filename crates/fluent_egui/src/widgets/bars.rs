@@ -326,13 +326,13 @@ impl TeachingTip {
         }
         let theme = FluentTheme::of(&target.ctx);
         let mut close = false;
-        Popup::from_response(target)
+        let popup = Popup::from_response(target)
             .id(target.id.with("fluent_teaching_tip"))
             .open(true)
             .close_behavior(PopupCloseBehavior::IgnoreClicks)
             .frame(flyout_frame(&theme).inner_margin(12))
             .width(self.width)
-            .gap(8.0)
+            .gap(10.0)
             .show(|ui| {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
@@ -364,9 +364,59 @@ impl TeachingTip {
                     }
                 }
             });
+        if let Some(popup) = popup {
+            paint_tail(
+                &target.ctx,
+                popup.response.layer_id,
+                popup.response.rect,
+                target.rect,
+                &theme,
+            );
+        }
         if close {
             *open = false;
         }
         out
     }
+}
+
+/// The tail of a [`TeachingTip`], a triangle in the gap pointing at the
+/// target. Only drawn when the tip sits right above or below it.
+fn paint_tail(
+    ctx: &egui::Context,
+    layer: egui::LayerId,
+    tip: egui::Rect,
+    target: egui::Rect,
+    theme: &FluentTheme,
+) {
+    const HALF_WIDTH: f32 = 12.0;
+    const HEIGHT: f32 = 10.0;
+    let (base_y, apex_y) = if tip.top() >= target.bottom() {
+        (tip.top() + 0.5, tip.top() - HEIGHT)
+    } else if tip.bottom() <= target.top() {
+        (tip.bottom() - 0.5, tip.bottom() + HEIGHT)
+    } else {
+        return;
+    };
+    let margin = 8.0 + HALF_WIDTH;
+    if tip.width() < 2.0 * margin {
+        return;
+    }
+    let x = target
+        .center()
+        .x
+        .clamp(tip.left() + margin, tip.right() - margin);
+    let points = vec![
+        pos2(x - HALF_WIDTH, base_y),
+        pos2(x, apex_y),
+        pos2(x + HALF_WIDTH, base_y),
+    ];
+    let painter = ctx.layer_painter(layer);
+    let stroke = Stroke::new(1.0, theme.resources.surface_stroke_color_default);
+    painter.add(egui::Shape::convex_polygon(
+        points.clone(),
+        theme.menu_color,
+        Stroke::NONE,
+    ));
+    painter.add(egui::Shape::line(points, stroke));
 }

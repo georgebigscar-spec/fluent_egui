@@ -98,7 +98,10 @@ impl<'a, S: AsRef<str>> AutoSuggestBox<'a, S> {
             });
         }
 
-        let mut text_box = TextBox::new(self.text).id_salt(edit_salt).trailing(28.0);
+        let mut text_box = TextBox::new(self.text)
+            .id_salt(edit_salt)
+            .trailing(28.0)
+            .clear_button(true);
         if let Some(p) = &self.placeholder {
             text_box = text_box.placeholder(p.clone());
         }
@@ -168,7 +171,11 @@ impl<'a, S: AsRef<str>> AutoSuggestBox<'a, S> {
 }
 
 /// The `search` magnifier glyph, 12px.
-fn paint_search_glyph(painter: &egui::Painter, center: egui::Pos2, color: egui::Color32) {
+pub(crate) fn paint_search_glyph(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    color: egui::Color32,
+) {
     let stroke = Stroke::new(1.2, color);
     let lens = center + vec2(1.0, -1.0);
     painter.circle_stroke(lens, 4.5, stroke);

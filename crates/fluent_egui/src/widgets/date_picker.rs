@@ -2,7 +2,7 @@ use egui::{Align, AsIdSalt, IdSalt, Response, Ui, Widget};
 
 use super::pickers::{PickerColumn, PickerPopupState, PopupAction, picker_button, picker_popup};
 use crate::Localizations;
-use crate::date::{Date, MONTH_NAMES, days_in_month};
+use crate::date::{Date, days_in_month};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Field {
@@ -91,9 +91,10 @@ impl Widget for DatePicker<'_> {
             year = start + popup.indices[2].clamp(0, i64::from(end - start)) as i32;
         }
         let l10n = Localizations::of(ui.ctx());
+        let names = l10n.date_names();
         let column = |field: Field| match field {
             Field::Month => PickerColumn {
-                items: MONTH_NAMES.iter().map(|m| (*m).to_owned()).collect(),
+                items: names.months.iter().map(|m| (*m).to_owned()).collect(),
                 width: 132.0,
                 looping: true,
                 align: Align::Min,
@@ -121,7 +122,7 @@ impl Widget for DatePicker<'_> {
             self.fields
                 .iter()
                 .map(|f| match f {
-                    Field::Month => d.month_name().to_owned(),
+                    Field::Month => names.month(d.month).to_owned(),
                     Field::Day => d.day.to_string(),
                     Field::Year => d.year.to_string(),
                 })

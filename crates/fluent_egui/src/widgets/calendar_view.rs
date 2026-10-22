@@ -6,7 +6,8 @@ use egui::{
 
 use super::button::accent_fill;
 use crate::FluentTheme;
-use crate::date::{Date, MONTH_NAMES, Weekday};
+use crate::Localizations;
+use crate::date::{Date, Weekday};
 use crate::utils::{ControlState, States, animate_color, paint_focus_border, wheel_steps};
 
 const WIDTH: f32 = 300.0;
@@ -30,10 +31,44 @@ struct CalendarState {
     mode: Mode,
     /// The month (or year, or decade) being shown.
     shown: Date,
+    /// In range mode, the start is picked and the next click picks the end.
+    range_pending: bool,
+}
+
+/// An inclusive span of days, picked in [`CalendarView::range`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DateRange {
+    pub start: Date,
+    pub end: Date,
+}
+
+impl DateRange {
+    pub fn contains(&self, date: Date) -> bool {
+        self.start <= date && date <= self.end
+    }
+}
+
+enum Selection<'a> {
+    Single(&'a mut Option<Date>),
+    Multiple(&'a mut Vec<Date>),
+    Range(&'a mut Option<DateRange>),
+}
+
+impl Selection<'_> {
+    /// The date to show first.
+    fn first(&self) -> Option<Date> {
+        match self {
+            Self::Single(date) => **date,
+            Self::Multiple(dates) => dates.first().copied(),
+            Self::Range(range) => range.map(|r| r.start),
+        }
+    }
 }
 
 /// A month grid for picking a date, with year and decade views a click on
-/// the header away. fluent_ui's `CalendarView` in single selection mode.
+/// the header away, fluent_ui's `CalendarView`. [`CalendarView::new`] picks
+/// one date, [`CalendarView::multiple`] several and [`CalendarView::range`] a
+/// span. Month and weekday names follow the installed [`Localizations`].
 ///
 /// ```no_run
 /// # fn ui(ui: &mut egui::Ui, date: &mut Option<fluent_egui::Date>) {
@@ -44,21 +79,36 @@ struct CalendarState {
 /// ```
 pub struct CalendarView<'a> {
     id_salt: IdSalt,
-    selected: &'a mut Option<Date>,
+    selection: Selection<'a>,
     min_date: Option<Date>,
     max_date: Option<Date>,
-    first_day_of_week: Weekday,
+    first_day_of_week: Option<Weekday>,
     today: Option<Date>,
 }
 
 impl<'a> CalendarView<'a> {
+    /// Picks one date. Clicking it again clears it.
     pub fn new(id_salt: impl AsIdSalt, selected: &'a mut Option<Date>) -> Self {
+        Self::with_selection(id_salt, Selection::Single(selected))
+    }
+
+    /// Picks any number of dates, kept sorted. A click toggles a day.
+    pub fn multiple(id_salt: impl AsIdSalt, selected: &'a mut Vec<Date>) -> Self {
+        Self::with_selection(id_salt, Selection::Multiple(selected))
+    }
+
+    /// Picks a span: the first click sets the start, the second the end.
+    pub fn range(id_salt: impl AsIdSalt, selected: &'a mut Option<DateRange>) -> Self {
+        Self::with_selection(id_salt, Selection::Range(selected))
+    }
+
+    fn with_selection(id_salt: impl AsIdSalt, selection: Selection<'a>) -> Self {
         Self {
             id_salt: IdSalt::new(id_salt),
-            selected,
+            selection,
             min_date: None,
             max_date: None,
-            first_day_of_week: Weekday::Sunday,
+            first_day_of_week: None,
             today: None,
         }
     }
@@ -75,8 +125,9 @@ impl<'a> CalendarView<'a> {
         self
     }
 
+    /// Defaults to the one of the installed locale.
     pub fn first_day_of_week(mut self, day: Weekday) -> Self {
-        self.first_day_of_week = day;
+        self.first_day_of_week = Some(day);
         self
     }
 
@@ -86,22 +137,72 @@ impl<'a> CalendarView<'a> {
         self
     }
 
+    /// Whether `day` is selected, and whether it is inside a picked range.
+    fn day_state(&self, day: Date) -> (bool, bool) {
+        match &self.selection {
+            Selection::Single(date) => (**date == Some(day), false),
+            Selection::Multiple(dates) => (dates.contains(&day), false),
+            Selection::Range(range) => match range {
+                Some(r) => (day == r.start || day == r.end, r.contains(day)),
+                None => (false, false),
+            },
+        }
+    }
+
+    /// Applies a click on `day`. Returns whether the selection changed.
+    fn click(&mut self, day: Date, state: &mut CalendarState) -> bool {
+        match &mut self.selection {
+            Selection::Single(date) => {
+                **date = if **date == Some(day) { None } else { Some(day) };
+            }
+            Selection::Multiple(dates) => {
+                if let Some(i) = dates.iter().position(|d| *d == day) {
+                    dates.remove(i);
+                } else {
+                    dates.push(day);
+                    dates.sort();
+                }
+            }
+            Selection::Range(range) => match range {
+                Some(r) if state.range_pending => {
+                    let start = r.start;
+                    **range = Some(DateRange {
+                        start: start.min(day),
+                        end: start.max(day),
+                    });
+                    state.range_pending = false;
+                }
+                _ => {
+                    **range = Some(DateRange {
+                        start: day,
+                        end: day,
+                    });
+                    state.range_pending = true;
+                }
+            },
+        }
+        true
+    }
+
     fn in_range(&self, date: Date) -> bool {
         self.min_date.is_none_or(|min| date >= min) && self.max_date.is_none_or(|max| date <= max)
     }
 }
 
 impl Widget for CalendarView<'_> {
-    fn ui(self, ui: &mut Ui) -> Response {
+    fn ui(mut self, ui: &mut Ui) -> Response {
         let theme = FluentTheme::of(ui.ctx());
         let r = &theme.resources;
         let id = ui.make_persistent_id(self.id_salt);
         let today = self.today.unwrap_or_else(Date::today);
+        let names = Localizations::of(ui.ctx()).date_names();
+        let first_day_of_week = self.first_day_of_week.unwrap_or(names.first_day_of_week);
         let mut state = ui
             .data(|d| d.get_temp::<CalendarState>(id))
             .unwrap_or(CalendarState {
                 mode: Mode::Month,
-                shown: self.selected.unwrap_or(today),
+                shown: self.selection.first().unwrap_or(today),
+                range_pending: false,
             });
 
         let (rect, mut response) = ui.allocate_exact_size(vec2(WIDTH, HEIGHT), Sense::hover());
@@ -132,7 +233,7 @@ impl Widget for CalendarView<'_> {
             pos2(up_rect.left() - 4.0, top + HEADER_HEIGHT),
         );
         let title = match state.mode {
-            Mode::Month => format!("{} {}", state.shown.month_name(), state.shown.year),
+            Mode::Month => format!("{} {}", names.month(state.shown.month), state.shown.year),
             Mode::Year => state.shown.year.to_string(),
             Mode::Decade => {
                 let start = state.shown.year.div_euclid(10) * 10;
@@ -206,8 +307,8 @@ impl Widget for CalendarView<'_> {
 
         match state.mode {
             Mode::Month => {
-                for (i, day) in (0..7).map(|i| (i, (self.first_day_of_week.index() + i) % 7)) {
-                    let name = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"][day as usize];
+                for (i, day) in (0..7).map(|i| (i, (first_day_of_week.index() + i) % 7)) {
+                    let name = names.weekdays[usize::from(day)];
                     let x = grid.left() + (f32::from(i) + 0.5) * grid.width() / 7.0;
                     painter.text(
                         pos2(x, grid.top() + WEEKDAY_ROW / 2.0),
@@ -219,17 +320,18 @@ impl Widget for CalendarView<'_> {
                 }
                 let first = Date::new(state.shown.year, state.shown.month, 1).unwrap_or(today);
                 let offset = (i64::from(first.weekday().index())
-                    - i64::from(self.first_day_of_week.index()))
+                    - i64::from(first_day_of_week.index()))
                 .rem_euclid(7);
                 let start = first.add_days(-offset);
                 let days = Rect::from_min_max(grid.min + vec2(0.0, WEEKDAY_ROW), grid.max);
                 for i in 0..42 {
                     let day = start.add_days(i);
                     let cell = cell_rect(days, 7, 6, i as usize);
-                    let selected = *self.selected == Some(day);
+                    let (selected, in_range) = self.day_state(day);
                     let cell_state = CellState {
                         filled: day == today,
                         selected,
+                        in_range,
                         out_of_scope: day.month != state.shown.month,
                         blackout: !self.in_range(day),
                     };
@@ -240,8 +342,7 @@ impl Widget for CalendarView<'_> {
                         &day.day.to_string(),
                         cell_state,
                     );
-                    if clicked && !selected {
-                        *self.selected = Some(day);
+                    if clicked && self.click(day, &mut state) {
                         response.mark_changed();
                         if day.month != state.shown.month {
                             state.shown = day;
@@ -257,6 +358,7 @@ impl Widget for CalendarView<'_> {
                     let cell_state = CellState {
                         filled: month.year == today.year && month.month == today.month,
                         selected: false,
+                        in_range: false,
                         out_of_scope: month.year != state.shown.year,
                         blackout: false,
                     };
@@ -267,7 +369,7 @@ impl Widget for CalendarView<'_> {
                             cell_rect(grid, 4, 4, i).center(),
                             Vec2::splat(56.0),
                         ),
-                        &MONTH_NAMES[usize::from(month.month - 1)][..3],
+                        &names.month_short(month.month),
                         cell_state,
                     );
                     if clicked {
@@ -283,6 +385,7 @@ impl Widget for CalendarView<'_> {
                     let cell_state = CellState {
                         filled: year == today.year,
                         selected: false,
+                        in_range: false,
                         out_of_scope: year >= start + 10,
                         blackout: false,
                     };
@@ -326,6 +429,8 @@ struct CellState {
     filled: bool,
     /// The selected day: an accent ring.
     selected: bool,
+    /// Inside a picked range: a faint accent fill.
+    in_range: bool,
     /// Outside the month (or year, or decade) being shown.
     out_of_scope: bool,
     /// Outside the allowed range: struck through and not clickable.
@@ -355,6 +460,8 @@ fn calendar_cell(ui: &mut Ui, id: Id, rect: Rect, text: &str, cell: CellState) -
     let accent = theme.accent_color.default_brush_for(theme.brightness);
     let fill = if cell.filled {
         accent_fill(&theme).resolve(state)
+    } else if cell.in_range && !cell.blackout {
+        accent.gamma_multiply(50.0 / 255.0)
     } else {
         States::new(
             r.subtle_fill_color_transparent,

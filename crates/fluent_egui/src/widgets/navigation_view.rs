@@ -60,6 +60,7 @@ enum PaneItemKind<T> {
         icon: Option<WidgetText>,
         title: WidgetText,
         enabled: bool,
+        children: Vec<PaneItem<T>>,
     },
     Header(WidgetText),
     Separator,
@@ -81,6 +82,7 @@ impl<T> PaneItem<T> {
                 icon: None,
                 title: title.into(),
                 enabled: true,
+                children: Vec::new(),
             },
         }
     }
@@ -112,10 +114,88 @@ impl<T> PaneItem<T> {
         self
     }
 
-    fn key(&self) -> Option<&T> {
+    /// Items nested under this one, fluent_ui's `PaneItemExpander`. In the
+    /// open pane a click selects the item and expands or collapses them;
+    /// in the compact pane and the top bar they open in a flyout.
+    pub fn children(mut self, items: impl IntoIterator<Item = PaneItem<T>>) -> Self {
+        if let PaneItemKind::Item { children, .. } = &mut self.kind {
+            *children = items.into_iter().collect();
+        }
+        self
+    }
+
+    /// How many selectable items this entry holds, itself and its
+    /// descendants, which is how far it moves the item index.
+    fn span(&self) -> usize {
         match &self.kind {
-            PaneItemKind::Item { key, .. } => Some(key),
-            _ => None,
+            PaneItemKind::Item { children, .. } => 1 + keyed_count(children),
+            _ => 0,
+        }
+    }
+}
+
+fn keyed_count<T>(items: &[PaneItem<T>]) -> usize {
+    items.iter().map(PaneItem::span).sum()
+}
+
+/// Keys and titles of every selectable item, depth first, in index order.
+fn collect_items<'a, T>(items: &'a [PaneItem<T>], out: &mut Vec<(&'a T, String)>) {
+    for item in items {
+        if let PaneItemKind::Item {
+            key,
+            title,
+            children,
+            ..
+        } = &item.kind
+        {
+            out.push((key, title.text().to_owned()));
+            collect_items(children, out);
+        }
+    }
+}
+
+/// Menu rows for `items`, with nested items in submenus. `index` is the
+/// item index of the first entry and ends past the last.
+fn menu_items<T>(
+    ui: &mut Ui,
+    items: &[PaneItem<T>],
+    index: &mut usize,
+    current: Option<usize>,
+    clicked: &mut Option<usize>,
+) {
+    for item in items {
+        match &item.kind {
+            PaneItemKind::Item {
+                icon,
+                title,
+                enabled,
+                children,
+                ..
+            } => {
+                let mine = *index;
+                *index += item.span();
+                if children.is_empty() {
+                    let mut menu_item =
+                        super::MenuItem::new(title.clone()).selected(current == Some(mine));
+                    if let Some(icon) = icon {
+                        menu_item = menu_item.icon(icon.clone());
+                    }
+                    if ui.add_enabled(*enabled, menu_item).clicked() {
+                        *clicked = Some(mine);
+                    }
+                } else {
+                    super::sub_menu(ui, title.clone(), |ui| {
+                        let mut index = mine + 1;
+                        menu_items(ui, children, &mut index, current, clicked);
+                    });
+                }
+            }
+            PaneItemKind::Header(text) => {
+                ui.add_enabled(false, super::MenuItem::new(text.clone()));
+            }
+            PaneItemKind::Separator => {
+                super::menu_separator(ui);
+            }
         }
     }
 }
@@ -172,6 +252,7 @@ pub struct NavigationView<T> {
     display_mode: PaneDisplayMode,
     open_width: f32,
     transition: Option<PageTransition>,
+    search: Option<String>,
 }
 
 impl<T: PartialEq + Clone> NavigationView<T> {
@@ -184,6 +265,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             display_mode: PaneDisplayMode::Auto,
             open_width: OPEN_WIDTH,
             transition: None,
+            search: None,
         }
     }
 
@@ -215,6 +297,14 @@ impl<T: PartialEq + Clone> NavigationView<T> {
         self
     }
 
+    /// A search box in the pane that suggests item titles and selects the
+    /// one picked, fluent_ui's `autoSuggestBox`. In the compact pane it is a
+    /// search button that opens the full pane.
+    pub fn search(mut self, placeholder: impl Into<String>) -> Self {
+        self.search = Some(placeholder.into());
+        self
+    }
+
     /// How the body animates when the selection changes. Defaults to
     /// [`PageTransition::entrance`], or a horizontal slide in top mode.
     pub fn transition(mut self, transition: PageTransition) -> Self {
@@ -243,7 +333,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             state.mode = Some(mode);
         }
         let now = ui.input(|i| i.time);
-        let current = self.keys().position(|k| k == selected);
+        let current = self.keys().into_iter().position(|k| k == selected);
         if current != state.to {
             state.from = state.to;
             state.to = current;
@@ -328,11 +418,11 @@ impl<T: PartialEq + Clone> NavigationView<T> {
         match mode {
             PaneDisplayMode::Top => {
                 let bar = Rect::from_min_size(rect.min, vec2(rect.width(), TOP_ROW_HEIGHT));
-                clicked = self.top_bar(ui, bar, current, indicator);
+                clicked = self.top_bar(ui, id, bar, current, indicator);
             }
             PaneDisplayMode::Open => {
                 let pane = Rect::from_min_size(rect.min, vec2(inline_width, rect.height()));
-                let out = self.pane(ui, pane, expand_t > 0.0, current, indicator);
+                let out = self.pane(ui, id, pane, expand_t > 0.0, current, indicator);
                 clicked = out.clicked;
                 if out.hamburger {
                     state.collapsed = !state.collapsed;
@@ -341,7 +431,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             _ => {
                 if mode == PaneDisplayMode::Compact && overlay_t == 0.0 {
                     let pane = Rect::from_min_size(rect.min, vec2(COMPACT_WIDTH, rect.height()));
-                    let out = self.pane(ui, pane, false, current, indicator);
+                    let out = self.pane(ui, id, pane, false, current, indicator);
                     clicked = out.clicked;
                     hamburger = out.hamburger;
                 } else if mode == PaneDisplayMode::Minimal {
@@ -391,7 +481,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
                         Stroke::new(1.0, r.surface_stroke_color_flyout),
                         StrokeKind::Inside,
                     );
-                    self.pane(ui, pane, true, current, indicator)
+                    self.pane(ui, id, pane, true, current, indicator)
                 })
                 .inner;
             if out.clicked.is_some() {
@@ -416,7 +506,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
 
         let changed = if let Some(index) = clicked
             && Some(index) != current
-            && let Some(key) = self.keys().nth(index)
+            && let Some(key) = self.keys().get(index).copied()
         {
             *selected = key.clone();
             true
@@ -433,17 +523,131 @@ impl<T: PartialEq + Clone> NavigationView<T> {
         }
     }
 
-    fn keys(&self) -> impl Iterator<Item = &T> {
-        self.items
-            .iter()
-            .chain(&self.footer_items)
-            .filter_map(PaneItem::key)
+    /// Every selectable item and its title, in index order.
+    fn all_items(&self) -> Vec<(&T, String)> {
+        let mut out = Vec::new();
+        collect_items(&self.items, &mut out);
+        collect_items(&self.footer_items, &mut out);
+        out
+    }
+
+    fn keys(&self) -> Vec<&T> {
+        self.all_items().into_iter().map(|(k, _)| k).collect()
+    }
+
+    /// The search box in `rect`. Returns the index of a picked item.
+    fn search_box(
+        &self,
+        ui: &mut Ui,
+        nav_id: egui::Id,
+        rect: Rect,
+        placeholder: &str,
+    ) -> Option<usize> {
+        let query_id = nav_id.with("fluent_nav_search_query");
+        let mut query = ui
+            .data(|d| d.get_temp::<String>(query_id))
+            .unwrap_or_default();
+        let titles: Vec<String> = self.all_items().into_iter().map(|(_, t)| t).collect();
+        let mut child = ui.new_child(
+            UiBuilder::new()
+                .id_salt(query_id)
+                .max_rect(rect)
+                .layout(Layout::top_down(Align::Min)),
+        );
+        let response = super::AutoSuggestBox::new("fluent_nav_search", &mut query, &titles)
+            .placeholder(placeholder)
+            .width(rect.width())
+            .show(&mut child);
+        if response.chosen.is_some() {
+            query.clear();
+        }
+        ui.data_mut(|d| d.insert_temp(query_id, query));
+        response.chosen
+    }
+
+    /// Rows for `items` in the pane, nested ones indented under expanded
+    /// parents. `inline` is false where nested items open in a flyout.
+    fn pane_items(
+        &self,
+        ui: &mut Ui,
+        items: &[PaneItem<T>],
+        depth: usize,
+        inline: bool,
+        walk: &mut PaneWalk<'_>,
+    ) {
+        let (labels, current) = (walk.labels, walk.current);
+        for item in items {
+            match &item.kind {
+                PaneItemKind::Item {
+                    icon,
+                    title,
+                    enabled,
+                    children,
+                    ..
+                } => {
+                    let mine = walk.index;
+                    walk.index += 1;
+                    let nested = keyed_count(children);
+                    let open = walk.expanded.contains(&mine);
+                    let expander = (!children.is_empty()).then_some(open && inline);
+                    let row = pane_item_row(
+                        ui,
+                        icon.clone(),
+                        title.clone(),
+                        *enabled,
+                        labels,
+                        current == Some(mine),
+                        if inline { depth } else { 0 },
+                        expander,
+                    );
+                    let tile = row.rect.shrink2(vec2(6.0, 2.0));
+                    walk.tiles[mine] = Some(tile);
+                    if children.is_empty() || inline {
+                        if row.clicked() {
+                            walk.clicked = Some(mine);
+                            if !children.is_empty() {
+                                if open {
+                                    walk.expanded.retain(|i| *i != mine);
+                                } else {
+                                    walk.expanded.push(mine);
+                                }
+                            }
+                        }
+                    } else {
+                        let theme = FluentTheme::of(ui.ctx());
+                        egui::Popup::menu(&row)
+                            .align(egui::RectAlign::RIGHT_START)
+                            .frame(super::menu::flyout_frame(&theme))
+                            .gap(4.0)
+                            .width(200.0)
+                            .show(|ui| {
+                                ui.spacing_mut().item_spacing.y = 2.0;
+                                let mut index = mine + 1;
+                                menu_items(ui, children, &mut index, current, &mut walk.clicked);
+                            });
+                    }
+                    if inline && open {
+                        self.pane_items(ui, children, depth + 1, inline, walk);
+                    } else {
+                        // Hidden items point the indicator at their parent.
+                        for tile_slot in &mut walk.tiles[mine + 1..mine + 1 + nested] {
+                            *tile_slot = Some(tile);
+                        }
+                        walk.index += nested;
+                    }
+                }
+                PaneItemKind::Header(text) if labels => pane_header(ui, text.clone()),
+                PaneItemKind::Header(_) => {}
+                PaneItemKind::Separator => pane_separator(ui),
+            }
+        }
     }
 
     /// The left pane in `rect`, with labels when `labels`.
     fn pane(
         &self,
         ui: &mut Ui,
+        nav_id: egui::Id,
         rect: Rect,
         labels: bool,
         current: Option<usize>,
@@ -467,8 +671,30 @@ impl<T: PartialEq + Clone> NavigationView<T> {
                 .map(|item| item_height(&ui, item, labels))
                 .sum::<f32>()
         };
+        let mut items_top = rect.top() + TOP_ROW_HEIGHT;
+        if let Some(placeholder) = &self.search {
+            if labels {
+                let search = Rect::from_min_size(
+                    pos2(rect.left() + 8.0, items_top + 4.0),
+                    vec2(rect.width() - 16.0, 32.0),
+                );
+                if let Some(i) = self.search_box(&mut ui, nav_id, search, placeholder) {
+                    out.clicked = Some(i);
+                }
+                items_top += 48.0;
+            } else {
+                let tile = Rect::from_min_size(
+                    pos2(rect.left() + 6.0, items_top + 2.0),
+                    vec2(COMPACT_WIDTH - 12.0, 36.0),
+                );
+                if search_button(&mut ui, tile).clicked() {
+                    out.hamburger = true;
+                }
+                items_top += ITEM_HEIGHT;
+            }
+        }
         let items_rect = Rect::from_min_max(
-            pos2(rect.left(), rect.top() + TOP_ROW_HEIGHT),
+            pos2(rect.left(), items_top),
             pos2(rect.right(), rect.bottom() - footer_height - 4.0),
         );
         let footer_rect = Rect::from_min_max(
@@ -476,37 +702,18 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             pos2(rect.right(), rect.bottom() - 4.0),
         );
 
-        let item_count = self.items.iter().filter(|i| i.key().is_some()).count();
-        let mut tiles = vec![None; item_count + self.footer_items.len()];
-        let mut index = 0;
-        let mut add_items = |ui: &mut Ui, items: &[PaneItem<T>], out: &mut PaneOutput| {
-            for item in items {
-                match &item.kind {
-                    PaneItemKind::Item {
-                        icon,
-                        title,
-                        enabled,
-                        ..
-                    } => {
-                        let row = pane_item_row(
-                            ui,
-                            icon.clone(),
-                            title.clone(),
-                            *enabled,
-                            labels,
-                            current == Some(index),
-                        );
-                        tiles[index] = Some(row.rect.shrink2(vec2(6.0, 2.0)));
-                        if row.clicked() {
-                            out.clicked = Some(index);
-                        }
-                        index += 1;
-                    }
-                    PaneItemKind::Header(text) if labels => pane_header(ui, text.clone()),
-                    PaneItemKind::Header(_) => {}
-                    PaneItemKind::Separator => pane_separator(ui),
-                }
-            }
+        let expanded_id = nav_id.with("fluent_nav_expanded");
+        let mut expanded = ui
+            .data(|d| d.get_temp::<Vec<usize>>(expanded_id))
+            .unwrap_or_default();
+        let mut tiles = vec![None; keyed_count(&self.items) + keyed_count(&self.footer_items)];
+        let mut walk = PaneWalk {
+            labels,
+            current,
+            index: 0,
+            tiles: &mut tiles,
+            clicked: None,
+            expanded: &mut expanded,
         };
 
         let mut items_ui = ui.new_child(UiBuilder::new().max_rect(items_rect));
@@ -515,14 +722,18 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             .auto_shrink([false; 2])
             .show(&mut items_ui, |ui| {
                 ui.spacing_mut().item_spacing = Vec2::ZERO;
-                add_items(ui, &self.items, &mut out)
+                self.pane_items(ui, &self.items, 0, labels, &mut walk);
             });
         if !self.footer_items.is_empty() {
             let mut footer_ui = ui.new_child(UiBuilder::new().max_rect(footer_rect));
             footer_ui.spacing_mut().item_spacing = Vec2::ZERO;
             pane_separator(&mut footer_ui);
-            add_items(&mut footer_ui, &self.footer_items, &mut out);
+            self.pane_items(&mut footer_ui, &self.footer_items, 0, false, &mut walk);
         }
+        if walk.clicked.is_some() {
+            out.clicked = walk.clicked;
+        }
+        ui.data_mut(|d| d.insert_temp(expanded_id, expanded));
 
         // The sticky indicator: a 3x16 pill on the left of the selected tile.
         if let Some(to) = indicator.to.and_then(|i| tiles.get(i).copied().flatten()) {
@@ -546,6 +757,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
     fn top_bar(
         &self,
         ui: &mut Ui,
+        nav_id: egui::Id,
         rect: Rect,
         current: Option<usize>,
         indicator: Indicator,
@@ -559,9 +771,10 @@ impl<T: PartialEq + Clone> NavigationView<T> {
             ui.spacing_mut().item_spacing = vec2(GAP, 0.0);
             ui
         };
-        let item_count = self.items.iter().filter(|i| i.key().is_some()).count();
-        let mut tiles = vec![None; item_count + self.footer_items.len()];
+        let item_count = keyed_count(&self.items);
+        let mut tiles = vec![None; item_count + keyed_count(&self.footer_items)];
         let mut clicked = None;
+        let mut searched = None;
         let mut add =
             |ui: &mut Ui, item: &PaneItem<T>, index: usize, tiles: &mut Vec<Option<Rect>>| {
                 match &item.kind {
@@ -569,18 +782,29 @@ impl<T: PartialEq + Clone> NavigationView<T> {
                         icon,
                         title,
                         enabled,
+                        children,
                         ..
                     } => {
+                        let span = item.span();
                         let response = top_item(
                             ui,
                             icon.clone(),
                             title.clone(),
                             *enabled,
-                            current == Some(index),
+                            current.is_some_and(|c| (index..index + span).contains(&c)),
                         );
-                        tiles[index] = Some(response.rect);
-                        if response.clicked() {
-                            clicked = Some(index);
+                        for tile in &mut tiles[index..index + span] {
+                            *tile = Some(response.rect);
+                        }
+                        if children.is_empty() {
+                            if response.clicked() {
+                                clicked = Some(index);
+                            }
+                        } else {
+                            super::menu::show_menu(&theme, &response, Some(200.0), |ui| {
+                                let mut child_index = index + 1;
+                                menu_items(ui, children, &mut child_index, current, &mut clicked);
+                            });
                         }
                     }
                     PaneItemKind::Header(_) => {}
@@ -600,12 +824,14 @@ impl<T: PartialEq + Clone> NavigationView<T> {
         let mut end = row(ui, Layout::right_to_left(Align::Center));
         let mut index = tiles.len();
         for item in self.footer_items.iter().rev() {
-            if item.key().is_some() {
-                index -= 1;
-            }
+            index -= item.span();
             add(&mut end, item, index, &mut tiles);
         }
-        let end_width = if self.footer_items.is_empty() {
+        if let Some(placeholder) = &self.search {
+            let (search, _) = end.allocate_exact_size(vec2(200.0, 32.0), Sense::hover());
+            searched = self.search_box(&mut end, nav_id, search, placeholder);
+        }
+        let end_width = if self.footer_items.is_empty() && self.search.is_none() {
             0.0
         } else {
             end.min_rect().width() + GAP
@@ -654,9 +880,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
         let mut index = 0;
         for item in &self.items[..visible] {
             add(&mut start, item, index, &mut tiles);
-            if item.key().is_some() {
-                index += 1;
-            }
+            index += item.span();
         }
         if visible < self.items.len() {
             let overflow_selected = current.is_some_and(|c| c >= index && c < item_count);
@@ -665,30 +889,13 @@ impl<T: PartialEq + Clone> NavigationView<T> {
                 tiles[current.unwrap_or_default()] = Some(more.rect);
             }
             super::menu::show_menu(&theme, &more, Some(200.0), |ui| {
-                for item in &self.items[visible..] {
-                    match &item.kind {
-                        PaneItemKind::Item {
-                            icon,
-                            title,
-                            enabled,
-                            ..
-                        } => {
-                            let mut menu_item = super::MenuItem::new(title.clone())
-                                .selected(current == Some(index));
-                            if let Some(icon) = icon {
-                                menu_item = menu_item.icon(icon.clone());
-                            }
-                            if ui.add_enabled(*enabled, menu_item).clicked() {
-                                clicked = Some(index);
-                            }
-                            index += 1;
-                        }
-                        PaneItemKind::Header(_) => {}
-                        PaneItemKind::Separator => {
-                            super::menu_separator(ui);
-                        }
-                    }
-                }
+                menu_items(
+                    ui,
+                    &self.items[visible..],
+                    &mut index,
+                    current,
+                    &mut clicked,
+                );
             });
         }
 
@@ -706,7 +913,7 @@ impl<T: PartialEq + Clone> NavigationView<T> {
                 theme.accent_color.default_brush_for(theme.brightness),
             );
         }
-        clicked
+        clicked.or(searched)
     }
 
     /// The hamburger and title above the content in minimal mode.
@@ -722,6 +929,46 @@ struct Indicator {
     from: Option<usize>,
     to: Option<usize>,
     t: f32,
+}
+
+/// Where [`NavigationView::pane_items`] is in the item list.
+struct PaneWalk<'a> {
+    labels: bool,
+    current: Option<usize>,
+    index: usize,
+    tiles: &'a mut [Option<Rect>],
+    clicked: Option<usize>,
+    expanded: &'a mut Vec<usize>,
+}
+
+/// The search button of the compact pane.
+fn search_button(ui: &mut Ui, tile: Rect) -> Response {
+    let theme = FluentTheme::of(ui.ctx());
+    let response = ui.interact(
+        tile,
+        ui.scope_id().with("fluent_nav_search_button"),
+        Sense::click(),
+    );
+    let label = Localizations::of(ui.ctx()).search_label;
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, label));
+    let response = response.fluent_tooltip(label);
+    let state = ControlState::from_response(&response);
+    let fill = animate_color(
+        ui.ctx(),
+        response.id.with("fill"),
+        subtle_fill(&theme).resolve(state),
+        theme.faster_animation_duration,
+    );
+    ui.painter().rect_filled(tile, 4.0, fill);
+    super::auto_suggest_box::paint_search_glyph(
+        ui.painter(),
+        tile.center(),
+        theme.resources.text_fill_color_primary,
+    );
+    if state.focused {
+        paint_focus_border(ui.painter(), tile, &theme);
+    }
+    response
 }
 
 #[derive(Default)]
@@ -834,6 +1081,7 @@ fn pane_separator(ui: &mut Ui) {
 }
 
 /// One item row of the left pane, fluent_ui's `PaneItem.build`.
+#[allow(clippy::too_many_arguments)]
 fn pane_item_row(
     ui: &mut Ui,
     icon: Option<WidgetText>,
@@ -841,10 +1089,14 @@ fn pane_item_row(
     enabled: bool,
     labels: bool,
     selected: bool,
+    depth: usize,
+    expander: Option<bool>,
 ) -> Response {
     let theme = FluentTheme::of(ui.ctx());
     let r = &theme.resources;
     let label = title.text().to_owned();
+    // Nested items move right by one icon column per level.
+    let indent = if labels { depth as f32 * 28.0 } else { 0.0 };
     let (rect, response) = ui.allocate_exact_size(
         vec2(ui.available_width(), ITEM_HEIGHT),
         if enabled {
@@ -896,25 +1148,44 @@ fn pane_item_row(
                 egui::FontId::proportional(16.0),
             );
             painter.galley(
-                tile.left_center() + vec2(20.0, 0.0) - galley.size() / 2.0,
+                tile.left_center() + vec2(20.0 + indent, 0.0) - galley.size() / 2.0,
                 galley,
                 color,
             );
         }
+        let chevron_room = if expander.is_some() { 28.0 } else { 0.0 };
         if labels {
             let galley = title.into_galley(
                 ui,
                 Some(TextWrapMode::Truncate),
-                tile.width() - 40.0 - 10.0,
+                tile.width() - 40.0 - indent - 10.0 - chevron_room,
                 theme.typography.body.font_id(),
             );
             painter
                 .with_clip_rect(tile.intersect(painter.clip_rect()))
                 .galley(
-                    pos2(tile.left() + 40.0, tile.center().y - galley.size().y / 2.0),
+                    pos2(
+                        tile.left() + 40.0 + indent,
+                        tile.center().y - galley.size().y / 2.0,
+                    ),
                     galley,
                     color,
                 );
+            if let Some(open) = expander {
+                let at = pos2(tile.right() - 18.0, tile.center().y);
+                if open {
+                    crate::utils::paint_chevron_up(painter, at, color);
+                } else {
+                    crate::utils::paint_chevron_down(painter, at, color);
+                }
+            }
+        } else if expander.is_some() {
+            // A small corner mark: this item opens a flyout.
+            crate::utils::paint_chevron_right(
+                painter,
+                pos2(tile.right() - 5.0, tile.bottom() - 7.0),
+                color,
+            );
         }
         if state.focused {
             paint_focus_border(painter, tile, &theme);

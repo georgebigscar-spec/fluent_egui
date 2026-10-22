@@ -1,7 +1,8 @@
 use egui::epaint::{Mesh, QuadraticBezierShape};
 use egui::{
-    AsIdSalt, Color32, CornerRadius, Frame, Id, IdSalt, Painter, Pos2, Rect, Response, Role,
-    ScrollArea, Sense, Stroke, TextWrapMode, Ui, Vec2, WidgetInfo, WidgetText, pos2, vec2,
+    AsIdSalt, Color32, CornerRadius, Frame, Id, IdSalt, Key, KeyboardShortcut, Modifiers, Painter,
+    Pos2, Rect, Response, Role, ScrollArea, Sense, Stroke, TextWrapMode, Ui, Vec2, WidgetInfo,
+    WidgetText, pos2, vec2,
 };
 
 use super::FluentTooltip as _;
@@ -115,6 +116,7 @@ pub struct TabView {
     add_button: bool,
     reorder: bool,
     min_body_height: f32,
+    shortcuts: bool,
 }
 
 impl TabView {
@@ -126,6 +128,7 @@ impl TabView {
             add_button: true,
             reorder: true,
             min_body_height: 0.0,
+            shortcuts: true,
         }
     }
 
@@ -148,6 +151,15 @@ impl TabView {
     /// Lets tabs be dragged to reorder them. On by default.
     pub fn reorderable(mut self, reorder: bool) -> Self {
         self.reorder = reorder;
+        self
+    }
+
+    /// The keyboard shortcuts of fluent_ui's `TabView`: Ctrl+T adds a tab,
+    /// Ctrl+W or Ctrl+F4 closes the current one, Ctrl+Tab and Ctrl+Shift+Tab
+    /// switch tabs, Ctrl+1 to Ctrl+8 pick a tab and Ctrl+9 the last. On by
+    /// default; turn it off when several tab views share a window.
+    pub fn shortcuts(mut self, shortcuts: bool) -> Self {
+        self.shortcuts = shortcuts;
         self
     }
 
@@ -175,6 +187,44 @@ impl TabView {
         let mut closed = None;
         let mut added = false;
         let mut moved = None;
+        if self.shortcuts && !tabs.is_empty() {
+            let n = tabs.len();
+            ui.input_mut(|i| {
+                let mut pressed =
+                    |modifiers, key| i.consume_shortcut(&KeyboardShortcut::new(modifiers, key));
+                if self.add_button && pressed(Modifiers::COMMAND, Key::T) {
+                    added = true;
+                }
+                if (pressed(Modifiers::COMMAND, Key::W) || pressed(Modifiers::COMMAND, Key::F4))
+                    && tabs[*current].closable
+                {
+                    closed = Some(*current);
+                }
+                if pressed(Modifiers::COMMAND | Modifiers::SHIFT, Key::Tab) {
+                    *current = (*current + n - 1) % n;
+                } else if pressed(Modifiers::COMMAND, Key::Tab) {
+                    *current = (*current + 1) % n;
+                }
+                let digits = [
+                    Key::Num1,
+                    Key::Num2,
+                    Key::Num3,
+                    Key::Num4,
+                    Key::Num5,
+                    Key::Num6,
+                    Key::Num7,
+                    Key::Num8,
+                ];
+                for (index, key) in digits.into_iter().enumerate() {
+                    if pressed(Modifiers::COMMAND, key) && index < n {
+                        *current = index;
+                    }
+                }
+                if pressed(Modifiers::COMMAND, Key::Num9) {
+                    *current = n - 1;
+                }
+            });
+        }
         let saved_spacing = ui.spacing().item_spacing;
         ui.spacing_mut().item_spacing = Vec2::ZERO;
         ui.add_space(4.5);

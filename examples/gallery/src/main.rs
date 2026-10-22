@@ -8,13 +8,13 @@ use fluent_egui::icons::{self, FLUENT_ICONS_FAMILY, WINDOWS_ICONS_FAMILY};
 use fluent_egui::{
     AccentColor, Acrylic, AutoSuggestBox, BreadcrumbBar, Brightness, Button, CalendarDatePicker,
     CalendarView, Card, Checkbox, ColorPicker, ColorSpectrumShape, ComboBox, CommandBar,
-    ContentDialog, DatePicker, DialogResult, Divider, DropDownButton, Expander, FluentTheme,
-    FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel, ListTile,
-    ListTileSelectionMode, Localizations, MenuBar, MenuItem, Mica, NavigationView, NumberBox,
-    PageTransition, PageTransitionKind, PaneDisplayMode, PaneItem, PasswordBox, ProgressBar,
-    ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton, Tab, TabView, TeachingTip,
-    TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem, TreeViewSelectionMode, colors,
-    combo_value, context_menu, fonts, l10n, menu_separator, radio_value, sub_menu,
+    ContentDialog, DatePicker, DateRange, DialogResult, Divider, DropDownButton, DynamicOverflow,
+    Expander, FluentTheme, FluentTooltip as _, IconButtonMode, InfoBadge, InfoBar, InfoLabel,
+    ListTile, ListTileSelectionMode, Localizations, MenuBar, MenuItem, Mica, NavigationView,
+    NumberBox, PageTransition, PageTransitionKind, PaneDisplayMode, PaneItem, PasswordBox,
+    ProgressBar, ProgressRing, Rating, ScaffoldPage, Severity, Slider, SplitButton, Tab, TabView,
+    TeachingTip, TextBox, TimePicker, ToggleSwitch, TreeView, TreeViewItem, TreeViewSelectionMode,
+    colors, combo_value, context_menu, fonts, l10n, menu_separator, radio_value, sub_menu,
 };
 
 fn main() -> eframe::Result {
@@ -47,17 +47,21 @@ enum Page {
     Typography,
     Divider,
     Icons,
+    Theming,
     Settings,
 }
 
 /// A pane entry: a section header, or a page with its icon and title.
 enum Entry {
     Header(&'static str),
+    Separator,
     Page(Page, &'static str, &'static str),
+    /// A page with nested pages under it.
+    Group(Page, &'static str, &'static str, &'static [Entry]),
 }
 
 impl Page {
-    const PANE: [Entry; 18] = [
+    const PANE: [Entry; 15] = [
         Entry::Header("Controls"),
         Entry::Page(Page::Buttons, "🔘", "Buttons"),
         Entry::Page(Page::Inputs, "☑", "Inputs"),
@@ -71,21 +75,51 @@ impl Page {
         Entry::Header("Status"),
         Entry::Page(Page::Progress, "⏳", "Progress"),
         Entry::Page(Page::Status, "🔔", "InfoBadge & InfoLabel"),
-        Entry::Header("Theming"),
-        Entry::Page(Page::Colors, "🎨", "Colors"),
-        Entry::Page(Page::Typography, "🔤", "Typography"),
-        Entry::Page(Page::Divider, "➖", "Divider"),
-        Entry::Page(Page::Icons, "⭐", "Icons"),
+        Entry::Separator,
+        Entry::Group(
+            Page::Theming,
+            "🖌",
+            "Theming",
+            &[
+                Entry::Page(Page::Colors, "🎨", "Colors"),
+                Entry::Page(Page::Typography, "🔤", "Typography"),
+                Entry::Page(Page::Divider, "➖", "Divider"),
+                Entry::Page(Page::Icons, "⭐", "Icons"),
+            ],
+        ),
     ];
 
     fn all() -> impl Iterator<Item = (Page, &'static str)> {
-        Self::PANE
+        fn walk(entries: &[Entry], out: &mut Vec<(Page, &'static str)>) {
+            for e in entries {
+                match e {
+                    Entry::Page(page, _, title) => out.push((*page, *title)),
+                    Entry::Group(page, _, title, children) => {
+                        out.push((*page, *title));
+                        walk(children, out);
+                    }
+                    Entry::Header(_) | Entry::Separator => {}
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(&Self::PANE, &mut out);
+        out.push((Page::Settings, "Settings"));
+        out.into_iter()
+    }
+
+    fn pane_items(entries: &[Entry]) -> Vec<PaneItem<Page>> {
+        entries
             .iter()
-            .filter_map(|e| match e {
-                Entry::Page(page, _, title) => Some((*page, *title)),
-                Entry::Header(_) => None,
+            .map(|e| match e {
+                Entry::Header(text) => PaneItem::header(*text),
+                Entry::Separator => PaneItem::separator(),
+                Entry::Page(page, icon, title) => PaneItem::new(*page, *title).icon(*icon),
+                Entry::Group(page, icon, title, children) => PaneItem::new(*page, *title)
+                    .icon(*icon)
+                    .children(Self::pane_items(children)),
             })
-            .chain([(Page::Settings, "Settings")])
+            .collect()
     }
 
     fn title(self) -> &'static str {
@@ -135,6 +169,10 @@ struct Demo {
     tree_single: Vec<&'static str>,
     tree_multiple: Vec<&'static str>,
     date: Option<fluent_egui::Date>,
+    range: Option<DateRange>,
+    dates: Vec<fluent_egui::Date>,
+    volume: f32,
+    search: String,
     due: Option<fluent_egui::Date>,
     birthday: Option<fluent_egui::Date>,
     alarm: Option<fluent_egui::Time>,
@@ -178,6 +216,10 @@ impl Default for Demo {
             tree_single: vec!["vacation.jpg"],
             tree_multiple: vec!["cv.pdf"],
             date: None,
+            range: None,
+            dates: Vec::new(),
+            volume: 30.0,
+            search: "Clear me".to_owned(),
             due: None,
             birthday: fluent_egui::Date::new(1990, 6, 15),
             alarm: None,
@@ -195,6 +237,7 @@ impl Default for Demo {
 impl Gallery {
     fn new(ctx: &egui::Context) -> Self {
         let mut defs = egui::FontDefinitions::default();
+        fonts::add_selawik(&mut defs);
         let mut icon_fonts = Vec::new();
         for (var, family) in [
             ("FLUENT_ICONS_TTF", FLUENT_ICONS_FAMILY),
@@ -253,7 +296,9 @@ impl Gallery {
     }
 
     fn install_theme(&self, ctx: &egui::Context) {
-        FluentTheme::with_accent(self.brightness, self.accent()).install(ctx);
+        FluentTheme::with_accent(self.brightness, self.accent())
+            .with_semibold_font()
+            .install(ctx);
         l10n::ALL[self.locale].install(ctx);
     }
 }
@@ -262,10 +307,7 @@ impl eframe::App for Gallery {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         let theme = FluentTheme::of(&ctx);
-        let items = Page::PANE.iter().map(|e| match e {
-            Entry::Header(text) => PaneItem::header(*text),
-            Entry::Page(page, icon, title) => PaneItem::new(*page, *title).icon(*icon),
-        });
+        let items = Page::pane_items(&Page::PANE);
         let current = self.page;
         let mut page = current;
         let mut nav = NavigationView::new("gallery_nav");
@@ -276,6 +318,7 @@ impl eframe::App for Gallery {
             .frame(egui::Frame::NONE.fill(theme.mica_background_color))
             .show(ui, |ui| {
                 nav.title("fluent_egui")
+                    .search("Search controls")
                     .display_mode(self.nav_mode)
                     .items(items)
                     .footer_items([PaneItem::new(Page::Settings, "Settings").icon("⚙")])
@@ -300,6 +343,9 @@ impl eframe::App for Gallery {
                                 Page::Divider => divider_page(ui, &theme),
                                 Page::Icons => {
                                     icons_page(ui, &theme, &self.icon_fonts, &mut self.icon_filter)
+                                }
+                                Page::Theming => {
+                                    ui.label("Colors, typography, dividers and icons. This item has nested items in the pane: click it again to fold them.");
                                 }
                                 Page::Settings => {
                                     if settings_page(ui, &theme, self) {
@@ -359,6 +405,25 @@ fn pickers_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
             None => "Nothing picked yet".to_owned(),
         },
     );
+
+    section(ui, theme, "CalendarView: range and multiple selection");
+    ui.horizontal_top(|ui| {
+        ui.vertical(|ui| {
+            ui.add(CalendarView::range("calendar_range", &mut demo.range));
+            caption(
+                ui,
+                match demo.range {
+                    Some(r) => format!("{} to {}", r.start, r.end),
+                    None => "Click a start and an end".to_owned(),
+                },
+            );
+        });
+        ui.add_space(16.0);
+        ui.vertical(|ui| {
+            ui.add(CalendarView::multiple("calendar_multi", &mut demo.dates));
+            caption(ui, format!("{} days picked", demo.dates.len()));
+        });
+    });
 
     section(ui, theme, "ColorPicker");
     ui.add(ToggleSwitch::new(&mut demo.box_spectrum, "Box spectrum"));
@@ -843,8 +908,11 @@ fn inputs_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 
     section(ui, theme, "Slider");
     ui.horizontal(|ui| {
-        ui.add_enabled(enabled, Slider::new(&mut demo.slider, 0.0..=100.0));
-        ui.label(format!("{:.0}", demo.slider));
+        ui.add_enabled(
+            enabled,
+            Slider::new(&mut demo.slider, 0.0..=100.0).value_tooltip(),
+        );
+        ui.label(format!("{:.0} (hover for the value tooltip)", demo.slider));
     });
     ui.horizontal(|ui| {
         ui.add_enabled(
@@ -852,6 +920,16 @@ fn inputs_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
             Slider::new(&mut demo.stepped, 0.0..=10.0).step(1.0),
         );
         ui.label(format!("{:.0} (step 1)", demo.stepped));
+    });
+    ui.horizontal(|ui| {
+        ui.add_enabled(
+            enabled,
+            Slider::new(&mut demo.volume, 0.0..=100.0)
+                .vertical(true)
+                .width(120.0)
+                .value_tooltip(),
+        );
+        ui.label(format!("Vertical: {:.0}", demo.volume));
     });
 
     section(ui, theme, "Rating");
@@ -912,6 +990,13 @@ fn text_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
 
     section(ui, theme, "TextBox");
     ui.add_enabled(enabled, TextBox::new(&mut demo.name).placeholder("Name"));
+    ui.add_space(8.0);
+    ui.add_enabled(
+        enabled,
+        TextBox::new(&mut demo.search)
+            .placeholder("With a clear button (focus it)")
+            .clear_button(true),
+    );
     ui.add_space(8.0);
     ui.add_enabled(
         enabled,
@@ -1279,6 +1364,45 @@ fn flyouts_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
             }
         });
     });
+
+    section(ui, theme, "DynamicOverflow (resize the window)");
+    const ACTIONS: [&str; 8] = [
+        "Cut",
+        "Copy",
+        "Paste",
+        "Rename",
+        "Share",
+        "Duplicate",
+        "Archive",
+        "Delete",
+    ];
+    let width = ui.available_width().min(420.0);
+    // Both closures report clicks, so they share a Cell.
+    let picked = std::cell::Cell::new(None);
+    ui.allocate_ui(egui::vec2(width, 32.0), |ui| {
+        DynamicOverflow::new("overflow_demo").show(
+            ui,
+            ACTIONS.len(),
+            |ui, i| {
+                if ui.add(Button::new(ACTIONS[i])).clicked() {
+                    picked.set(Some(i));
+                }
+            },
+            |ui, hidden| {
+                DropDownButton::new("More").show(ui, |ui| {
+                    for i in hidden {
+                        if ui.add(MenuItem::new(ACTIONS[i])).clicked() {
+                            picked.set(Some(i));
+                        }
+                    }
+                });
+            },
+        );
+    });
+
+    if let Some(i) = picked.get() {
+        demo.last_action = ACTIONS[i].to_owned();
+    }
 
     section(ui, theme, "Tooltip, ContentDialog, TeachingTip");
     ui.horizontal(|ui| {

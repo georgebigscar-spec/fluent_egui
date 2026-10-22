@@ -98,6 +98,16 @@ impl FluentTheme {
         Self::new(Brightness::Dark)
     }
 
+    /// Uses [`crate::fonts::SEMIBOLD_FAMILY`] for the semibold steps of the
+    /// type ramp (titles, subtitles, strong body text). Register the family
+    /// first, for example with `fonts::add_selawik`.
+    pub fn with_semibold_font(mut self) -> Self {
+        self.typography = self
+            .typography
+            .with_semibold_family(egui::FontFamily::Name(crate::fonts::SEMIBOLD_FAMILY.into()));
+        self
+    }
+
     pub fn with_accent(brightness: Brightness, accent_color: AccentColor) -> Self {
         let light = !brightness.is_dark();
         let resources = if light {
