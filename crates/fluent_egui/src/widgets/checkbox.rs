@@ -4,8 +4,8 @@ use egui::{
     WidgetText, pos2,
 };
 
-use super::allocate_labeled;
 use super::button::{accent_fill, on_accent_text};
+use super::{LABELED_MIN_HEIGHT, allocate_labeled};
 use crate::FluentTheme;
 use crate::utils::{ControlState, States, animate_color, paint_focus_border};
 
@@ -19,6 +19,7 @@ enum Value<'a> {
 pub struct Checkbox<'a> {
     value: Value<'a>,
     text: Option<WidgetText>,
+    min_height: f32,
 }
 
 impl<'a> Checkbox<'a> {
@@ -26,6 +27,7 @@ impl<'a> Checkbox<'a> {
         Self {
             value: Value::Bool(checked),
             text: Some(text.into()),
+            min_height: LABELED_MIN_HEIGHT,
         }
     }
 
@@ -34,6 +36,7 @@ impl<'a> Checkbox<'a> {
         Self {
             value: Value::Bool(checked),
             text: None,
+            min_height: LABELED_MIN_HEIGHT,
         }
     }
 
@@ -44,7 +47,15 @@ impl<'a> Checkbox<'a> {
         Self {
             value: Value::Tristate(checked),
             text: Some(text.into()),
+            min_height: LABELED_MIN_HEIGHT,
         }
+    }
+
+    /// Height of the row. Defaults to 24 so stacked checkboxes get some
+    /// space; pass 0 for the compact fluent_ui size.
+    pub fn min_height(mut self, min_height: f32) -> Self {
+        self.min_height = min_height;
+        self
     }
 }
 
@@ -57,8 +68,14 @@ impl Widget for Checkbox<'_> {
             .as_ref()
             .map(|t| t.text().to_owned())
             .unwrap_or_default();
-        let (mut response, boxed, text) =
-            allocate_labeled(ui, Vec2::splat(20.0), 8.0, 0.0, self.text, Sense::click());
+        let (mut response, boxed, text) = allocate_labeled(
+            ui,
+            Vec2::splat(20.0),
+            8.0,
+            self.min_height,
+            self.text,
+            Sense::click(),
+        );
 
         let current = match &self.value {
             Value::Bool(b) => Some(**b),

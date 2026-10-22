@@ -28,6 +28,10 @@ use egui::{Galley, Pos2, Rect, Response, Sense, TextWrapMode, Ui, Vec2, WidgetTe
 
 use crate::FluentTheme;
 
+/// Default row height of checkboxes and radio buttons, so stacked ones get
+/// some space between them. Between fluent_ui (20) and WinUI (32).
+pub(crate) const LABELED_MIN_HEIGHT: f32 = 24.0;
+
 /// Layout shared by checkbox-like controls: an indicator of `indicator` size,
 /// then `gap`, then an optional label, in a row at least `min_height` tall. Returns the response for the whole row,
 /// the indicator rect and the placed label.

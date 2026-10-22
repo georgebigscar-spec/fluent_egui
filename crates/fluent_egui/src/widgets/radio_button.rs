@@ -1,7 +1,7 @@
 use egui::{Response, Role, Sense, Stroke, Ui, Vec2, Widget, WidgetInfo, WidgetText};
 
-use super::allocate_labeled;
 use super::button::accent_fill;
+use super::{LABELED_MIN_HEIGHT, allocate_labeled};
 use crate::FluentTheme;
 use crate::utils::{ControlState, States, paint_focus_border};
 
@@ -14,15 +14,12 @@ pub struct RadioButton {
     min_height: f32,
 }
 
-/// WinUI's `RadioButton` `MinHeight`, which spaces out stacked radio buttons.
-const DEFAULT_MIN_HEIGHT: f32 = 32.0;
-
 impl RadioButton {
     pub fn new(checked: bool, text: impl Into<WidgetText>) -> Self {
         Self {
             checked,
             text: Some(text.into()),
-            min_height: DEFAULT_MIN_HEIGHT,
+            min_height: LABELED_MIN_HEIGHT,
         }
     }
 
@@ -30,12 +27,12 @@ impl RadioButton {
         Self {
             checked,
             text: None,
-            min_height: DEFAULT_MIN_HEIGHT,
+            min_height: LABELED_MIN_HEIGHT,
         }
     }
 
-    /// Height of the row. Defaults to 32, like WinUI, so a stack of radio
-    /// buttons gets breathing room; pass 0 for the compact fluent_ui size.
+    /// Height of the row. Defaults to 24 so a stack of radio buttons gets
+    /// breathing room; pass 0 for the compact fluent_ui size.
     pub fn min_height(mut self, min_height: f32) -> Self {
         self.min_height = min_height;
         self
