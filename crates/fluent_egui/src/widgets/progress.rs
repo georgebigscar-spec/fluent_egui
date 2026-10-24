@@ -1,6 +1,6 @@
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
-use egui::{Id, Rect, Response, Role, Sense, Stroke, Ui, Vec2, Widget, WidgetInfo, pos2};
+use egui::{Color32, Id, Rect, Response, Role, Sense, Stroke, Ui, Vec2, Widget, WidgetInfo, pos2};
 
 use crate::FluentTheme;
 use crate::utils::paint_arc;
@@ -12,6 +12,8 @@ pub struct ProgressBar {
     value: Option<f32>,
     stroke_width: f32,
     width: Option<f32>,
+    active_color: Option<Color32>,
+    background_color: Option<Color32>,
 }
 
 impl ProgressBar {
@@ -20,6 +22,8 @@ impl ProgressBar {
             value: Some(value),
             stroke_width: 4.5,
             width: None,
+            active_color: None,
+            background_color: None,
         }
     }
 
@@ -28,6 +32,8 @@ impl ProgressBar {
             value: None,
             stroke_width: 4.5,
             width: None,
+            active_color: None,
+            background_color: None,
         }
     }
 
@@ -39,6 +45,19 @@ impl ProgressBar {
     /// Defaults to the available width, at least 130.
     pub fn width(mut self, width: f32) -> Self {
         self.width = Some(width);
+        self
+    }
+
+    /// The filled part, fluent_ui's `activeColor`. Defaults to the accent
+    /// color, pass a status color for meters such as password strength.
+    pub fn active_color(mut self, color: Color32) -> Self {
+        self.active_color = Some(color);
+        self
+    }
+
+    /// The track behind it, fluent_ui's `backgroundColor`.
+    pub fn background_color(mut self, color: Color32) -> Self {
+        self.background_color = Some(color);
         self
     }
 }
@@ -104,8 +123,13 @@ impl Widget for ProgressBar {
         if ui.is_rect_visible(rect) {
             let painter = ui.painter();
             let radius = self.stroke_width / 2.0;
-            let active = theme.accent_color.default_brush_for(theme.brightness);
-            painter.rect_filled(rect, radius, theme.inactive_background_color);
+            let active = self
+                .active_color
+                .unwrap_or_else(|| theme.accent_color.default_brush_for(theme.brightness));
+            let background = self
+                .background_color
+                .unwrap_or(theme.inactive_background_color);
+            painter.rect_filled(rect, radius, background);
             let segment = |from: f32, to: f32| {
                 let x0 = rect.left() + from.clamp(0.0, 1.0) * rect.width();
                 let x1 = rect.left() + to.clamp(0.0, 1.0) * rect.width();

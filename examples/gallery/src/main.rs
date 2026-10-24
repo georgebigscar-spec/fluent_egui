@@ -1234,6 +1234,19 @@ fn progress_page(ui: &mut egui::Ui, theme: &FluentTheme, demo: &mut Demo) {
     ui.add_space(8.0);
     ui.add(ProgressRing::new(demo.progress));
 
+    section(ui, theme, "Custom colors");
+    let r = &theme.resources;
+    let color = match demo.progress {
+        p if p < 34.0 => r.system_fill_color_critical,
+        p if p < 67.0 => r.system_fill_color_caution,
+        _ => r.system_fill_color_success,
+    };
+    ui.add(
+        ProgressBar::new(demo.progress)
+            .width(300.0)
+            .active_color(color),
+    );
+
     section(ui, theme, "Indeterminate");
     ui.add(ProgressBar::indeterminate().width(300.0));
     ui.add_space(8.0);
