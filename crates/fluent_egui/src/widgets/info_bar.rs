@@ -120,7 +120,10 @@ impl InfoBar {
             ui.set_width(ui.available_width());
             ui.set_min_height(48.0 - 28.0);
             let align = if self.long { Align::Min } else { Align::Center };
-            ui.with_layout(Layout::left_to_right(align), |ui| {
+            // A row like `ui.horizontal`: `with_layout` would center the
+            // content in, and so take, all the height left in `ui`.
+            let row = Vec2::new(ui.available_width(), 20.0);
+            ui.allocate_ui_with_layout(row, Layout::left_to_right(align), |ui| {
                 // Icon box matches the title's line height so they line up.
                 let (icon_rect, _) =
                     ui.allocate_exact_size(Vec2::new(16.0, 20.0), egui::Sense::hover());
