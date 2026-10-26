@@ -7,6 +7,9 @@ use super::Button;
 use crate::FluentTheme;
 use crate::utils::with_alpha;
 
+/// Space kept between the dialog and the screen edges when it has to shrink.
+const SCREEN_MARGIN: f32 = 12.0;
+
 /// Which [`ContentDialog`] button closed it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DialogResult {
@@ -81,7 +84,8 @@ impl ContentDialog {
         self
     }
 
-    /// Content width, clamped to WinUI's 320..=548. 368 by default.
+    /// Content width, clamped to WinUI's 320..=548. 368 by default. On a
+    /// screen too narrow for it, such as a phone, the dialog shrinks to fit.
     pub fn width(mut self, width: f32) -> Self {
         self.width = width.clamp(320.0, 548.0);
         self
@@ -111,7 +115,9 @@ impl ContentDialog {
                 color: with_alpha(egui::Color32::BLACK, 0.3),
             });
         let mut result = None;
-        let width = self.width;
+        // Leave a margin around the dialog on narrow screens.
+        let fit = ctx.content_rect().width() - 48.0 - 2.0 * SCREEN_MARGIN;
+        let width = self.width.min(fit).max(0.0);
         let modal = Modal::new(Id::unique(("fluent_egui::ContentDialog", self.id)))
             .frame(frame)
             .backdrop_color(r.smoke_fill_color_default)
